@@ -65,6 +65,7 @@ async fn main() {
             key.starts_with("CUSTOM_ENV_CI_")
                 || key.starts_with("GITLAB_")
                 || key.starts_with("CI_")
+                || true
         })
         .collect();
 
