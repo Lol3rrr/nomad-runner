@@ -36,12 +36,12 @@ pub struct JobConfig {
 /// The Environment Information for a given Job
 #[derive(Debug, Args)]
 pub struct CiEnv {
-    #[arg(env = "CI_COMMIT_SHA")]
+    #[arg(env = "CUSTOM_ENV_CI_COMMIT_SHA")]
     pub commit_sha: String,
 
-    #[arg(env = "CI_JOB_ID")]
+    #[arg(env = "CUSTOM_ENV_CI_JOB_ID")]
     pub ci_job_id: String,
 
-    #[arg(env = "CI_JOB_IMAGE")]
+    #[arg(env = "CUSTOM_ENV_CI_JOB_IMAGE")]
     pub job_image: String,
 }
