@@ -300,6 +300,7 @@ pub async fn run(
         _ => MANAGEMENT_NAME,
     };
 
+    let script_name = script_path.file_name().unwrap().to_str().unwrap();
     let script_content = std::fs::read_to_string(script_path).unwrap();
 
     let mut copy_session =
@@ -307,7 +308,7 @@ pub async fn run(
             .await
             .unwrap();
     copy_session
-        .write_to_file(&script_content, "./script.sh")
+        .write_to_file(&script_content, &format!("./{}", script_name))
         .await
         .unwrap();
 
@@ -317,13 +318,13 @@ pub async fn run(
             .unwrap();
 
     run_session
-        .execute_command("chmod +x ./script.sh", |_| {}, |_| {})
+        .execute_command(&format!("chmod +x ./{}", script_name), |_| {}, |_| {})
         .await
         .unwrap();
 
     let exit_code = run_session
         .execute_command(
-            "./script.sh",
+            &format!("./{}", script_name),
             |msg| {
                 println!("{}", msg);
             },
