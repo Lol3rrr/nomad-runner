@@ -303,6 +303,9 @@ pub async fn run(
     let script_name = script_path.file_name().unwrap().to_str().unwrap();
     let script_content = std::fs::read_to_string(script_path).unwrap();
 
+    println!("[RUN] {}", script_name);
+    println!("{}", script_content);
+
     let mut copy_session =
         ExecSession::start(&config.address, config.port, &running_alloc.id, job_name)
             .await
