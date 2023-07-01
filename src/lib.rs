@@ -296,17 +296,19 @@ pub async fn run(
 
     let script_content = std::fs::read_to_string(script_path).unwrap();
 
-    let mut copy_session = ExecSession::start(&running_alloc.id, job_name)
-        .await
-        .unwrap();
+    let mut copy_session =
+        ExecSession::start(&config.address, config.port, &running_alloc.id, job_name)
+            .await
+            .unwrap();
     copy_session
         .write_to_file(&script_content, "/script.sh")
         .await
         .unwrap();
 
-    let mut run_session = ExecSession::start(&running_alloc.id, job_name)
-        .await
-        .unwrap();
+    let mut run_session =
+        ExecSession::start(&config.address, config.port, &running_alloc.id, job_name)
+            .await
+            .unwrap();
     run_session
         .execute_command("chmod +x /script.sh", |_| {}, |_| {})
         .await
@@ -363,7 +365,7 @@ struct ExecSession {
 }
 
 impl ExecSession {
-    pub async fn start(alloc_id: &str, task_name: &str) -> Result<Self, ()> {
+    pub async fn start(host: &str, port: u16, alloc_id: &str, task_name: &str) -> Result<Self, ()> {
         let route = format!("v1/client/allocation/{}/exec", alloc_id);
 
         let cmd_string = format!("[\"/bin/bash\"]");
@@ -371,8 +373,8 @@ impl ExecSession {
 
         let mut ub = url_builder::URLBuilder::new();
         ub.set_protocol("ws")
-            .set_host("192.168.10.8")
-            .set_port(5646)
+            .set_host(host)
+            .set_port(port)
             .add_route(&route)
             .add_param("command", &command_encoded)
             .add_param("task", task_name)
