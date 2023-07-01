@@ -44,10 +44,10 @@ enum Command {
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     for arg in std::env::args_os() {
-        println!("[ARG] {:?}", arg);
+        eprintln!("[ARG] {:?}", arg);
     }
     for env in std::env::vars_os() {
-        println!("[ENV] {:?}", env);
+        eprintln!("[ENV] {:?}", env);
     }
 
     let args = App::parse();
