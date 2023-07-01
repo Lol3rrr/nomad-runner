@@ -43,6 +43,13 @@ enum Command {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
+    for arg in std::env::args_os() {
+        println!("[ARG] {:?}", arg);
+    }
+    for env in std::env::vars_os() {
+        println!("[ENV] {:?}", env);
+    }
+
     let args = App::parse();
 
     let env_values = args.ci_env;
