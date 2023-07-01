@@ -1,0 +1,228 @@
+/// All the Nomad Job related definitions
+pub mod job {
+    use std::collections::HashMap;
+
+    use serde::{Deserialize, Serialize};
+
+    /// The Job Specification
+    #[derive(Debug, Serialize)]
+    pub struct Spec {
+        /// The Datacenters in which this Job should run
+        #[serde(rename = "Datacenters")]
+        pub datacenters: Vec<String>,
+
+        /// The ID of the Job
+        #[serde(rename = "ID")]
+        pub id: String,
+
+        /// The Type of the Job
+        #[serde(rename = "Type")]
+        pub ty: Ty,
+
+        /// The Task Groups that are part of this Job
+        #[serde(rename = "TaskGroups")]
+        pub task_groups: Vec<TaskGroup>,
+    }
+
+    /// The Types of Jobs that can be run
+    #[derive(Debug, Serialize)]
+    pub enum Ty {
+        /// Service Jobs should run continuously and are restarted after stopping on their own.
+        #[serde(rename = "service")]
+        Service,
+        /// Batch Jobs are only restarted if they exit with a failure, indicated by an exit code
+        /// other than 0
+        #[serde(rename = "batch")]
+        Batch,
+    }
+
+    /// A single Task Group for a Job
+    #[derive(Debug, Serialize)]
+    pub struct TaskGroup {
+        /// The Name of the Task Group
+        #[serde(rename = "Name")]
+        pub name: String,
+
+        /// The Network Configuration for the entire Task Group
+        #[serde(rename = "Networks")]
+        pub networks: Vec<serde_json::Value>,
+
+        /// The Service Configuration for the entire Task Group
+        #[serde(rename = "Services")]
+        pub services: Vec<serde_json::Value>,
+
+        /// The Tasks that are part of this Task Group
+        #[serde(rename = "Tasks")]
+        pub tasks: Vec<Task>,
+    }
+
+    /// A single Task that is part of a Task Group
+    #[derive(Debug, Serialize)]
+    pub struct Task {
+        /// The Name of the Task itself
+        #[serde(rename = "Name")]
+        pub name: String,
+
+        /// The Driver Configuration for the Task
+        #[serde(flatten)]
+        pub config: TaskConfig,
+
+        /// The Resources needed by the Task
+        #[serde(rename = "Resources")]
+        pub resources: TaskResources,
+
+        /// The Environment Variables for the Job
+        #[serde(rename = "Env")]
+        pub env: HashMap<String, String>,
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(tag = "Driver", content = "Config")]
+    pub enum TaskConfig {
+        /// The Docker Driver Configuration
+        #[serde(rename = "docker")]
+        Docker {
+            /// The Image to use
+            image: String,
+            /// The Command to execute inside of the Container
+            entrypoint: Vec<String>,
+            /// Whether or not the Container should be run in interactive mode or not
+            interactive: bool,
+        },
+    }
+
+    /// The Resources requested for a given Task
+    #[derive(Debug, Serialize)]
+    pub struct TaskResources {
+        /// The CPU Capacity that is needed in MhZ
+        #[serde(rename = "CPU")]
+        pub cpu: usize,
+
+        /// The Memory Capactity needed in MB
+        #[serde(rename = "MemoryMB")]
+        pub memory_mb: usize,
+    }
+
+    #[derive(Debug, Serialize)]
+    pub struct RunRequest {
+        #[serde(rename = "Job")]
+        pub job: Spec,
+    }
+
+    #[derive(Debug, Deserialize)]
+    pub struct RunResponse {
+        #[serde(rename = "EvalID")]
+        pub eval_id: String,
+        #[serde(rename = "EvalCreateIndex")]
+        pub eval_create_index: usize,
+        #[serde(rename = "JobModifyIndex")]
+        pub job_modify_index: usize,
+        #[serde(rename = "Warnings")]
+        pub warnings: String,
+        #[serde(rename = "Index")]
+        pub index: usize,
+        #[serde(rename = "LastContact")]
+        pub last_contact: usize,
+        #[serde(rename = "KnownLeader")]
+        pub known_leader: bool,
+    }
+}
+
+pub mod allocation {
+    use std::collections::HashMap;
+
+    use base64::Engine as _;
+    use serde::{Deserialize, Deserializer, Serialize};
+
+    pub type ListJobAllocationsResponse = Vec<Spec>;
+
+    #[derive(Debug, Deserialize)]
+    pub struct Spec {
+        #[serde(rename = "ID")]
+        pub id: String,
+
+        #[serde(rename = "ClientStatus")]
+        pub client_status: String,
+
+        #[serde(
+            rename = "TaskStates",
+            default,
+            deserialize_with = "nullable_taskstates"
+        )]
+        pub task_states: HashMap<String, TaskState>,
+    }
+
+    fn nullable_taskstates<'de, D>(deserializer: D) -> Result<HashMap<String, TaskState>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let tmp = Option::deserialize(deserializer)?;
+        Ok(tmp.unwrap_or_default())
+    }
+
+    #[derive(Debug, Deserialize)]
+    pub struct TaskState {
+        #[serde(rename = "State")]
+        pub state: String,
+
+        #[serde(rename = "Failed")]
+        pub failed: bool,
+    }
+
+    #[derive(Debug, Serialize)]
+    pub struct ExecRequestFrame {
+        pub stdin: ExecData,
+    }
+
+    #[derive(Debug, Deserialize)]
+    pub struct ExecResponseFrame {
+        pub stdout: Option<ExecData>,
+        pub stderr: Option<ExecData>,
+
+        #[serde(default)]
+        pub exited: bool,
+        pub result: Option<ExecResult>,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct ExecResult {
+        #[serde(default)]
+        pub exit_code: isize,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct ExecData {
+        #[serde(default)]
+        data: String,
+        #[serde(default)]
+        close: bool,
+    }
+
+    impl ExecData {
+        pub fn close() -> Self {
+            Self {
+                data: String::new(),
+                close: true,
+            }
+        }
+
+        pub fn data(data: &str) -> Self {
+            Self {
+                data: base64::engine::general_purpose::STANDARD.encode(data),
+                close: false,
+            }
+        }
+
+        pub fn decode_data(&self) -> String {
+            base64::engine::general_purpose::STANDARD
+                .decode(&self.data)
+                .map_err(|e| ())
+                .and_then(|d| String::from_utf8(d).map_err(|e| ()))
+                .unwrap()
+        }
+    }
+}
+
+pub mod evaluations {
+    pub type ListAllocationsResponse = Vec<super::allocation::Spec>;
+}
