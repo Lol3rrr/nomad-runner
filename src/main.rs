@@ -71,7 +71,6 @@ async fn main() {
 
             false
         })
-        .map(|(k, v)| (k.strip_prefix("CUSTOM_ENV_").unwrap().to_string(), v))
         .collect();
 
     match args.command {
