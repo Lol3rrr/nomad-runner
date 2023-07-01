@@ -176,8 +176,6 @@ pub async fn prepere(
 
     let job_spec_json = job::RunRequest { job: job_spec };
 
-    println!("Request Body: {:?}", serde_json::to_string(&job_spec_json));
-
     let url = {
         let mut tmp = url_builder::URLBuilder::new();
 
@@ -250,7 +248,7 @@ pub async fn prepere(
             break;
         }
 
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_millis(2500)).await;
     }
 }
 
@@ -304,7 +302,7 @@ pub async fn run(
     let script_content = std::fs::read_to_string(script_path).unwrap();
 
     println!("[RUN] {}", script_name);
-    println!("{}", script_content);
+    // println!("{}", script_content);
 
     let mut copy_session =
         ExecSession::start(&config.address, config.port, &running_alloc.id, job_name)
@@ -441,7 +439,7 @@ impl ExecSession {
         let mut exit_code = 0;
 
         while let Ok(Some(msg_res)) =
-            tokio::time::timeout(Duration::from_millis(2500), self.connection.next()).await
+            tokio::time::timeout(Duration::from_millis(10000), self.connection.next()).await
         {
             let msg = match msg_res {
                 Ok(m) => m,
