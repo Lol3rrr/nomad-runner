@@ -62,14 +62,9 @@ async fn main() {
 
     let all_envs: HashMap<String, String> = std::env::vars()
         .filter(|(key, _)| {
-            if key.starts_with("CUSTOM_ENV_CI_") {
-                return true;
-            }
-            if key.starts_with("GITLAB_") {
-                return true;
-            }
-
-            false
+            key.starts_with("CUSTOM_ENV_CI_")
+                || key.starts_with("GITLAB_")
+                || key.starts_with("CI_")
         })
         .collect();
 
