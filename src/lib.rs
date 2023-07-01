@@ -64,6 +64,10 @@ impl From<String> for RunSubStage {
             }
         }
 
+        if input.starts_with("step_script") {
+            return Self::BuildScript;
+        }
+
         if input.starts_with("step_") {
             let name = input.strip_prefix("step_").unwrap();
 
@@ -148,7 +152,8 @@ pub async fn prepere(
                         work_dir: "/mnt/alloc".to_string(),
                         mounts: vec![],
                     },
-                    env: extra_envs.clone(),
+                    // env: extra_envs.clone(),
+                    env: HashMap::new(),
                     resources: job::TaskResources {
                         cpu: 3000,
                         memory_mb: 750,
@@ -164,7 +169,8 @@ pub async fn prepere(
                         work_dir: "/mnt/alloc".to_string(),
                         mounts: vec![],
                     },
-                    env: extra_envs.clone(),
+                    // env: extra_envs.clone(),
+                    env: HashMap::new(),
                     resources: job::TaskResources {
                         cpu: 100,
                         memory_mb: 500,
