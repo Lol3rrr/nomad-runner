@@ -312,7 +312,7 @@ pub async fn run(
     let script_content = std::fs::read_to_string(script_path).unwrap();
 
     println!("[RUN] {}", script_name);
-    // println!("{}", script_content);
+    println!("{}", script_content);
 
     let mut copy_session =
         ExecSession::start(&config.address, config.port, &running_alloc.id, job_name)
@@ -329,7 +329,7 @@ pub async fn run(
             .unwrap();
 
     run_session
-        .execute_command(&format!("chmod +x ./{}", script_name), |_| {}, |_| {})
+        .execute_command(&format!("chmod +x ./{};", script_name), |_| {}, |_| {})
         .await
         .unwrap();
 
