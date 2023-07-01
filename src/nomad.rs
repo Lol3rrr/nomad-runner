@@ -88,7 +88,21 @@ pub mod job {
             entrypoint: Vec<String>,
             /// Whether or not the Container should be run in interactive mode or not
             interactive: bool,
+            /// Volumes to mount
+            volumes: Vec<String>,
+            /// The Working Directory inside of the Container
+            work_dir: String,
+            mounts: Vec<DockerMount>,
         },
+    }
+
+    #[derive(Debug, Serialize)]
+    pub struct DockerMount {
+        #[serde(rename = "type")]
+        pub ty: String,
+        pub source: String,
+        pub target: String,
+        pub readonly: bool,
     }
 
     /// The Resources requested for a given Task

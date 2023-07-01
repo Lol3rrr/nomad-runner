@@ -144,6 +144,9 @@ pub async fn prepere(
                         image: ci_env.job_image.clone(),
                         entrypoint: vec!["/bin/bash".to_string()],
                         interactive: true,
+                        volumes: vec!["../alloc/:/mnt/alloc".to_string()],
+                        work_dir: "/mnt/alloc".to_string(),
+                        mounts: vec![],
                     },
                     env: extra_envs.clone(),
                     resources: job::TaskResources {
@@ -157,6 +160,9 @@ pub async fn prepere(
                         image: "gitlab/gitlab-runner:latest".to_string(),
                         entrypoint: vec!["/bin/bash".to_string()],
                         interactive: true,
+                        volumes: vec!["../alloc/:/mnt/alloc".to_string()],
+                        work_dir: "/mnt/alloc".to_string(),
+                        mounts: vec![],
                     },
                     env: extra_envs.clone(),
                     resources: job::TaskResources {
@@ -301,7 +307,7 @@ pub async fn run(
             .await
             .unwrap();
     copy_session
-        .write_to_file(&script_content, "/script.sh")
+        .write_to_file(&script_content, "./script.sh")
         .await
         .unwrap();
 
@@ -309,8 +315,9 @@ pub async fn run(
         ExecSession::start(&config.address, config.port, &running_alloc.id, job_name)
             .await
             .unwrap();
+
     run_session
-        .execute_command("chmod +x /script.sh", |_| {}, |_| {})
+        .execute_command("chmod +x ./script.sh", |_| {}, |_| {})
         .await
         .unwrap();
 
