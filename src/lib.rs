@@ -311,15 +311,17 @@ pub async fn run(
     let script_name = script_path.file_name().unwrap().to_str().unwrap();
     let script_content = std::fs::read_to_string(script_path).unwrap();
 
-    println!("[RUN] {}", script_name);
+    println!("[RUN] {:?}", script_path.as_os_str());
     println!("{}", script_content);
+
+    tokio::fs::write(format!("./'{:?}'.tmp", script_path), &script_content).await;
 
     let mut copy_session =
         ExecSession::start(&config.address, config.port, &running_alloc.id, job_name)
             .await
             .unwrap();
     copy_session
-        .write_to_file(&script_content, &format!("./{}", script_name))
+        .write_to_file(&script_content, &format!("/mnt/alloc/{}", script_name))
         .await
         .unwrap();
 
@@ -329,13 +331,20 @@ pub async fn run(
             .unwrap();
 
     run_session
-        .execute_command(&format!("chmod +x ./{};", script_name), |_| {}, |_| {})
+        .execute_command(
+            &format!(
+                "mkdir /mnt/alloc/builds; cd /mnt/alloc/builds; chmod +x /mnt/alloc/{};",
+                script_name
+            ),
+            |_| {},
+            |_| {},
+        )
         .await
         .unwrap();
 
     let exit_code = run_session
         .execute_command(
-            &format!("./{}", script_name),
+            &format!("/mnt/alloc/{}", script_name),
             |msg| {
                 println!("{}", msg);
             },
