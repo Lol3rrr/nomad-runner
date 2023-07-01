@@ -100,7 +100,9 @@ async fn main() {
 
             println!("Run Cleanup");
 
-            nomad_runner::cleanup(&nomad_config, &job_env).await;
+            // TODO
+            // Only for testing
+            // nomad_runner::cleanup(&nomad_config, &job_env).await;
         }
     };
 }
