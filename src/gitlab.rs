@@ -20,6 +20,12 @@ impl DriverInfo {
     }
 }
 
+impl Default for DriverInfo {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, Serialize, Args)]
 pub struct JobInfo {
     #[serde(rename = "JOB_ID")]

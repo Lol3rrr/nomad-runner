@@ -2,8 +2,8 @@
 A custom gitlab runner for running gitlab runs on a nomad cluster
 
 ## Usage
-### Docker
 Using the docker image: `ghcr.io/lol3rrr/nomad-runner:latest`
+Example Nomad job found in `examples/nomad-job.hcl`
 
 Configuration for the runner itself:
 ```

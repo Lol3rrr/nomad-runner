@@ -11,11 +11,9 @@ use futures_util::{stream::StreamExt, SinkExt};
 use tokio::net::TcpStream;
 use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream};
 
-const JOB_NAME: &'static str = "Job";
-const MANAGEMENT_NAME: &'static str = "Manage";
+const JOB_NAME: &str = "Job";
+const MANAGEMENT_NAME: &str = "Manage";
 
-// TODO
-// Load the address and port from environment variables if its running inside of nomad
 /// The Nomad Configuration
 ///
 /// This is needed to configure the correct Access to a Nomad Cluster
@@ -24,6 +22,43 @@ pub struct NomadConfig {
     pub address: String,
     pub port: u16,
     pub datacenters: Vec<String>,
+}
+
+impl NomadConfig {
+    /// Creates the Nomad Configuration with default starting Values and then overwrites these
+    /// Values with values loaded from Environment Values
+    ///
+    /// # Environment Variables
+    /// * `NOMAD_ADDR`: The Nomad address
+    /// * `NOMAD_PORT`: The Nomad Port
+    /// * `NOMAD_DATACENTER`: The Datacenter in which to run the Jobs
+    pub fn load_with_defaults() -> Self {
+        let mut raw = Self {
+            address: "127.0.0.1".to_string(),
+            port: 4646,
+            datacenters: vec!["dc1".to_string()],
+        };
+
+        // Search for set environment variables
+        for (key, value) in std::env::vars() {
+            match key.as_str() {
+                "NOMAD_ADDR" => {
+                    raw.address = value;
+                }
+                "NOMAD_PORT" => {
+                    if let Ok(port) = value.parse() {
+                        raw.port = port;
+                    }
+                }
+                "NOMAD_DATACENTER" => {
+                    raw.datacenters = vec![value];
+                }
+                _ => {}
+            };
+        }
+
+        raw
+    }
 }
 
 pub fn config(ci_env: &CiEnv) -> gitlab::JobConfig {
@@ -152,7 +187,7 @@ pub async fn prepere(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEn
                         .collect(),
                     resources: job::TaskResources {
                         cpu: 3000,
-                        memory_mb: 750,
+                        memory_mb: 1000,
                     },
                 },
                 job::Task {

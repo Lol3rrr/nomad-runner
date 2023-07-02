@@ -47,11 +47,7 @@ async fn main() {
 
     let env_values = args.ci_env;
 
-    let nomad_config = NomadConfig {
-        address: "192.168.10.8".to_owned(),
-        port: 5646,
-        datacenters: vec!["aachen".to_string()],
-    };
+    let nomad_config = NomadConfig::load_with_defaults();
 
     match args.command {
         Command::Config => {

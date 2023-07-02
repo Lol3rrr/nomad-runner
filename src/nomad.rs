@@ -213,13 +213,6 @@ pub mod allocation {
     }
 
     impl ExecData {
-        pub fn close() -> Self {
-            Self {
-                data: String::new(),
-                close: true,
-            }
-        }
-
         pub fn data(data: &str) -> Self {
             Self {
                 data: base64::engine::general_purpose::STANDARD.encode(data),
@@ -228,6 +221,9 @@ pub mod allocation {
         }
 
         pub fn decode_data(&self) -> String {
+            // TODO
+            // Figure out error handling for this
+
             base64::engine::general_purpose::STANDARD
                 .decode(&self.data)
                 .map_err(|e| ())
@@ -284,7 +280,7 @@ impl Client {
             .get(url)
             .send()
             .await
-            .map_err(|e| ClientRequestError::SendingRequest(e))?;
+            .map_err(ClientRequestError::SendingRequest)?;
 
         if !res.status().is_success() {
             return Err(ClientRequestError::ErrorResponse {
@@ -294,7 +290,7 @@ impl Client {
 
         res.json()
             .await
-            .map_err(|e| ClientRequestError::InvalidResponse(e))
+            .map_err(ClientRequestError::InvalidResponse)
     }
 
     pub async fn run_job(&self, spec: job::Spec) -> Result<job::RunResponse, ClientRequestError> {
@@ -317,7 +313,7 @@ impl Client {
             .json(&job_spec_json)
             .send()
             .await
-            .map_err(|e| ClientRequestError::SendingRequest(e))?;
+            .map_err(ClientRequestError::SendingRequest)?;
 
         if !res.status().is_success() {
             let status = res.status();
@@ -335,7 +331,7 @@ impl Client {
 
         res.json()
             .await
-            .map_err(|e| ClientRequestError::InvalidResponse(e))
+            .map_err(ClientRequestError::InvalidResponse)
     }
 
     pub async fn get_eval_allocations(
@@ -358,7 +354,7 @@ impl Client {
             .get(&url)
             .send()
             .await
-            .map_err(|e| ClientRequestError::SendingRequest(e))?;
+            .map_err(ClientRequestError::SendingRequest)?;
 
         if !res.status().is_success() {
             return Err(ClientRequestError::ErrorResponse {
@@ -368,6 +364,6 @@ impl Client {
 
         res.json()
             .await
-            .map_err(|e| ClientRequestError::InvalidResponse(e))
+            .map_err(ClientRequestError::InvalidResponse)
     }
 }
