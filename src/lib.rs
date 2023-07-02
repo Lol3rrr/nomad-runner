@@ -8,7 +8,7 @@ mod nomad;
 pub use gitlab::{CiEnv, JobInfo};
 
 use futures_util::{stream::StreamExt, SinkExt};
-use tokio::net::TcpStream;
+use tokio::{io::AsyncWriteExt, net::TcpStream};
 use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream};
 
 const JOB_NAME: &'static str = "Job";
@@ -314,8 +314,6 @@ pub async fn run(
     println!("[RUN] {:?}", script_path.as_os_str());
     println!("{}", script_content);
 
-    tokio::fs::write(format!("./'{:?}'.tmp", script_path), &script_content).await;
-
     let mut copy_session =
         ExecSession::start(&config.address, config.port, &running_alloc.id, job_name)
             .await
@@ -493,7 +491,7 @@ impl ExecSession {
     }
 
     pub async fn write_to_file(&mut self, content: &str, path: &str) -> Result<isize, ()> {
-        let cmd = format!("echo \"{}\" > {}", content, path);
+        let cmd = format!("echo \"{}\" > {}", content.replace('"', "\\\""), path);
 
         self.execute_command(&cmd, |_| {}, |_| {}).await
     }
