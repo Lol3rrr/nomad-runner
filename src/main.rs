@@ -77,11 +77,7 @@ async fn main() {
         Command::Cleanup => {
             let job_env = args.job_env.expect("Job Environment should be set");
 
-            println!("Run Cleanup");
-
-            // TODO
-            // Only for testing
-            // nomad_runner::cleanup(&nomad_config, &job_env).await;
+            nomad_runner::cleanup(&nomad_config, &job_env).await;
         }
     };
 }
