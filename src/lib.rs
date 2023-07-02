@@ -248,7 +248,7 @@ pub async fn run(
     info: &gitlab::JobInfo,
     script_path: &Path,
     sub_stage: RunSubStage,
-) {
+) -> Result<i32, ()> {
     let nomad_client = nomad::Client::new(config.address.clone(), config.port);
 
     let content = nomad_client
@@ -276,37 +276,53 @@ pub async fn run(
     let script_name = script_path.file_name().unwrap().to_str().unwrap();
     let script_content = std::fs::read_to_string(script_path).unwrap();
 
-    let mut copy_session =
-        ExecSession::start(&config.address, config.port, &running_alloc.id, JOB_NAME)
-            .await
-            .unwrap();
+    let mut copy_session = ExecSession::start(
+        &config.address,
+        config.port,
+        &running_alloc.id,
+        JOB_NAME,
+        &["/bin/bash"],
+    )
+    .await
+    .unwrap();
     copy_session
         .write_to_file(&script_content, &format!("/mnt/alloc/{}", script_name))
         .await
         .unwrap();
 
-    ExecSession::start(&config.address, config.port, &running_alloc.id, JOB_NAME)
-        .await
-        .unwrap()
-        .execute_command(
-            &format!(
-                "mkdir /mnt/alloc/builds; cd /mnt/alloc/builds; chmod +x /mnt/alloc/{}; exit 0;",
-                script_name
-            ),
-            |_| {},
-            |_| {},
-        )
-        .await
-        .unwrap();
+    ExecSession::start(
+        &config.address,
+        config.port,
+        &running_alloc.id,
+        JOB_NAME,
+        &["/bin/bash"],
+    )
+    .await
+    .unwrap()
+    .execute_command(
+        &format!(
+            "mkdir /mnt/alloc/builds; cd /mnt/alloc/builds; chmod +x /mnt/alloc/{}; exit 0;",
+            script_name
+        ),
+        |_| {},
+        |_| {},
+    )
+    .await
+    .unwrap();
 
-    let mut run_session =
-        ExecSession::start(&config.address, config.port, &running_alloc.id, job_name)
-            .await
-            .unwrap();
+    let mut run_session = ExecSession::start(
+        &config.address,
+        config.port,
+        &running_alloc.id,
+        job_name,
+        &["/bin/bash", &format!("/mnt/alloc/{}", script_name)],
+    )
+    .await
+    .unwrap();
 
     let exit_code = run_session
         .execute_command(
-            &format!("/mnt/alloc/{}; exit 0", script_name),
+            &format!(""),
             |msg| {
                 println!("{}", msg);
             },
@@ -317,7 +333,7 @@ pub async fn run(
         .await
         .unwrap();
 
-    println!("Exit-Code: {}", exit_code);
+    Ok(exit_code)
 }
 
 /// Runs the Cleanup Stage for the Gitlab Runner
@@ -355,10 +371,16 @@ struct ExecSession {
 }
 
 impl ExecSession {
-    pub async fn start(host: &str, port: u16, alloc_id: &str, task_name: &str) -> Result<Self, ()> {
+    pub async fn start(
+        host: &str,
+        port: u16,
+        alloc_id: &str,
+        task_name: &str,
+        cmds: &[&str],
+    ) -> Result<Self, ()> {
         let route = format!("v1/client/allocation/{}/exec", alloc_id);
 
-        let cmd_string = format!("[\"/bin/bash\"]");
+        let cmd_string = serde_json::to_string(cmds).unwrap();
         let command_encoded = urlencoding::encode(&cmd_string);
 
         let mut ub = url_builder::URLBuilder::new();
@@ -403,7 +425,7 @@ impl ExecSession {
         command: &str,
         mut stdout: SO,
         mut stderr: SE,
-    ) -> Result<isize, ()>
+    ) -> Result<i32, ()>
     where
         SO: FnMut(String),
         SE: FnMut(String),
@@ -430,7 +452,7 @@ impl ExecSession {
             let frame: allocation::ExecResponseFrame = match msg {
                 Message::Text(txt) => serde_json::from_str(&txt).unwrap(),
                 Message::Close(_close_frame) => {
-                    // println!("{:?}", close_frame);
+                    // println!("{:?}", _close_frame);
 
                     break;
                 }
@@ -452,7 +474,7 @@ impl ExecSession {
         Ok(exit_code)
     }
 
-    pub async fn write_to_file(&mut self, content: &str, path: &str) -> Result<isize, ()> {
+    pub async fn write_to_file(&mut self, content: &str, path: &str) -> Result<i32, ()> {
         let cmd = format!(
             "echo \"{}\" > {}; exit 0",
             content.replace('"', "\\\""),

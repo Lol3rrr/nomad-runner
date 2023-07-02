@@ -201,7 +201,7 @@ pub mod allocation {
     #[derive(Debug, Serialize, Deserialize)]
     pub struct ExecResult {
         #[serde(default)]
-        pub exit_code: isize,
+        pub exit_code: i32,
     }
 
     #[derive(Debug, Serialize, Deserialize)]

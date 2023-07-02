@@ -68,7 +68,12 @@ async fn main() {
         } => {
             let job_env = args.job_env.expect("Job Environment should be set");
 
-            nomad_runner::run(&nomad_config, &job_env, &script_path, substage).await;
+            match nomad_runner::run(&nomad_config, &job_env, &script_path, substage).await {
+                Ok(exit_code) => {
+                    std::process::exit(exit_code);
+                }
+                Err(e) => {}
+            };
         }
         Command::Cleanup => {
             let job_env = args.job_env.expect("Job Environment should be set");
