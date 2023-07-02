@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use nomad_runner::{CiEnv, JobInfo, NomadConfig};

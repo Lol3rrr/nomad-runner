@@ -1,4 +1,4 @@
-use clap::{Args, Parser};
+use clap::Args;
 use serde::Serialize;
 
 /// The Information about this Driver

@@ -1,6 +1,6 @@
-use std::{collections::HashMap, path::Path, time::Duration};
+use std::{path::Path, time::Duration};
 
-use crate::nomad::{allocation, evaluations, job};
+use crate::nomad::{allocation, job};
 
 mod gitlab;
 mod nomad;
@@ -177,73 +177,23 @@ pub async fn prepere(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEn
         }],
     };
 
-    let job_spec_json = job::RunRequest { job: job_spec };
+    let nomad_client = nomad::Client::new(config.address.clone(), config.port);
 
-    let url = {
-        let mut tmp = url_builder::URLBuilder::new();
-
-        tmp.set_host(&config.address)
-            .set_port(config.port)
-            .set_protocol("http")
-            .add_route("v1/jobs");
-
-        tmp.build()
-    };
-
-    let res = reqwest::Client::new()
-        .post(url)
-        .json(&job_spec_json)
-        .send()
-        .await
-        .expect("Request to Nomad failed");
-
-    if !res.status().is_success() {
-        println!("Received Error");
-        let body = res.bytes().await.expect("");
-
-        let body_str = String::from_utf8(body.to_vec()).unwrap();
-        println!("{:?}", body_str);
-
-        todo!()
-    }
-
-    let raw_res_body = res.bytes().await.unwrap();
-    let res_body: job::RunResponse = serde_json::from_slice(&raw_res_body).unwrap();
+    let res_body = nomad_client.run_job(job_spec).await.unwrap();
     println!("Body: {:?}", res_body);
 
-    let url = {
-        let mut tmp = url_builder::URLBuilder::new();
-
-        tmp.set_host(&config.address)
-            .set_port(config.port)
-            .set_protocol("http")
-            .add_route(&format!("v1/evaluation/{}/allocations", res_body.eval_id));
-
-        tmp.build()
-    };
-
     loop {
-        let res = reqwest::Client::new()
-            .get(&url)
-            .send()
+        let eval_allocs = nomad_client
+            .get_eval_allocations(&res_body.eval_id)
             .await
-            .expect("Request to Nomad Failed");
+            .unwrap();
 
-        if !res.status().is_success() {
-            todo!()
-        }
-
-        let raw_res_body = res.bytes().await.unwrap();
-        let res_body: evaluations::ListAllocationsResponse =
-            serde_json::from_slice(&raw_res_body).unwrap();
-        println!("Body: {:?}", res_body);
-
-        let running = !res_body.is_empty()
-            && res_body.into_iter().all(|alloc| {
+        let running = !eval_allocs.is_empty()
+            && eval_allocs.iter().all(|alloc| {
                 !alloc.task_states.is_empty()
                     && alloc
                         .task_states
-                        .into_values()
+                        .values()
                         .all(|state| state.state.eq_ignore_ascii_case("running"))
             });
 
@@ -251,7 +201,9 @@ pub async fn prepere(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEn
             break;
         }
 
-        tokio::time::sleep(Duration::from_millis(2500)).await;
+        println!("Body: {:?}", eval_allocs);
+
+        tokio::time::sleep(Duration::from_millis(1250)).await;
     }
 }
 
@@ -262,27 +214,12 @@ pub async fn run(
     script_path: &Path,
     sub_stage: RunSubStage,
 ) {
-    let client = reqwest::Client::new();
+    let nomad_client = nomad::Client::new(config.address.clone(), config.port);
 
-    let url = {
-        let mut tmp = url_builder::URLBuilder::new();
-
-        let route = format!("v1/job/{}/allocations", info.job_id);
-        tmp.set_host(&config.address)
-            .set_port(config.port)
-            .set_protocol("http")
-            .add_route(&route);
-
-        tmp.build()
-    };
-
-    let res = client.get(url).send().await.expect("");
-
-    if !res.status().is_success() {
-        todo!("Could not load Job Allocations");
-    }
-
-    let content: nomad::allocation::ListJobAllocationsResponse = res.json().await.unwrap();
+    let content = nomad_client
+        .get_job_allocations(&info.job_id)
+        .await
+        .expect("Should be able to load Job Allocations");
 
     let running_alloc = match content.into_iter().find(|alloc| {
         alloc
@@ -457,7 +394,7 @@ impl ExecSession {
 
             let frame: allocation::ExecResponseFrame = match msg {
                 Message::Text(txt) => serde_json::from_str(&txt).unwrap(),
-                Message::Close(close_frame) => {
+                Message::Close(_close_frame) => {
                     // println!("{:?}", close_frame);
 
                     break;

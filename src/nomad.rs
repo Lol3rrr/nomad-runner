@@ -240,3 +240,134 @@ pub mod allocation {
 pub mod evaluations {
     pub type ListAllocationsResponse = Vec<super::allocation::Spec>;
 }
+
+pub struct Client {
+    addr: String,
+    port: u16,
+    http_client: reqwest::Client,
+}
+
+#[derive(Debug)]
+pub enum ClientRequestError {
+    SendingRequest(reqwest::Error),
+    ErrorResponse { status_code: reqwest::StatusCode },
+    InvalidResponse(reqwest::Error),
+}
+
+impl Client {
+    pub fn new(addr: String, port: u16) -> Self {
+        Self {
+            addr,
+            port,
+            http_client: reqwest::Client::new(),
+        }
+    }
+
+    pub async fn get_job_allocations(
+        &self,
+        job_id: &str,
+    ) -> Result<allocation::ListJobAllocationsResponse, ClientRequestError> {
+        let url = {
+            let mut tmp = url_builder::URLBuilder::new();
+
+            let route = format!("v1/job/{}/allocations", job_id);
+            tmp.set_host(&self.addr)
+                .set_port(self.port)
+                .set_protocol("http")
+                .add_route(&route);
+
+            tmp.build()
+        };
+
+        let res = self
+            .http_client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| ClientRequestError::SendingRequest(e))?;
+
+        if !res.status().is_success() {
+            return Err(ClientRequestError::ErrorResponse {
+                status_code: res.status(),
+            });
+        }
+
+        res.json()
+            .await
+            .map_err(|e| ClientRequestError::InvalidResponse(e))
+    }
+
+    pub async fn run_job(&self, spec: job::Spec) -> Result<job::RunResponse, ClientRequestError> {
+        let job_spec_json = job::RunRequest { job: spec };
+
+        let url = {
+            let mut tmp = url_builder::URLBuilder::new();
+
+            tmp.set_host(&self.addr)
+                .set_port(self.port)
+                .set_protocol("http")
+                .add_route("v1/jobs");
+
+            tmp.build()
+        };
+
+        let res = self
+            .http_client
+            .post(url)
+            .json(&job_spec_json)
+            .send()
+            .await
+            .map_err(|e| ClientRequestError::SendingRequest(e))?;
+
+        if !res.status().is_success() {
+            let status = res.status();
+
+            println!("Response: {:?}", res);
+            let body = res.bytes().await.expect("");
+
+            let body_str = String::from_utf8(body.to_vec()).unwrap();
+            println!("Body: {:?}", body_str);
+
+            return Err(ClientRequestError::ErrorResponse {
+                status_code: status,
+            });
+        }
+
+        res.json()
+            .await
+            .map_err(|e| ClientRequestError::InvalidResponse(e))
+    }
+
+    pub async fn get_eval_allocations(
+        &self,
+        eval: &str,
+    ) -> Result<evaluations::ListAllocationsResponse, ClientRequestError> {
+        let url = {
+            let mut tmp = url_builder::URLBuilder::new();
+
+            tmp.set_host(&self.addr)
+                .set_port(self.port)
+                .set_protocol("http")
+                .add_route(&format!("v1/evaluation/{}/allocations", eval));
+
+            tmp.build()
+        };
+
+        let res = self
+            .http_client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| ClientRequestError::SendingRequest(e))?;
+
+        if !res.status().is_success() {
+            return Err(ClientRequestError::ErrorResponse {
+                status_code: res.status(),
+            });
+        }
+
+        res.json()
+            .await
+            .map_err(|e| ClientRequestError::InvalidResponse(e))
+    }
+}
