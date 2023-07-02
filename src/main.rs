@@ -43,13 +43,6 @@ enum Command {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-    for arg in std::env::args_os() {
-        // eprintln!("[ARG] {:?}", arg);
-    }
-    for env in std::env::vars_os() {
-        // eprintln!("[ENV] {:?}", env);
-    }
-
     let args = App::parse();
 
     let env_values = args.ci_env;
@@ -59,15 +52,6 @@ async fn main() {
         port: 5646,
         datacenters: vec!["aachen".to_string()],
     };
-
-    let all_envs: HashMap<String, String> = std::env::vars()
-        .filter(|(key, _)| {
-            key.starts_with("CUSTOM_ENV_CI_")
-                || key.starts_with("GITLAB_")
-                || key.starts_with("CI_")
-                || true
-        })
-        .collect();
 
     match args.command {
         Command::Config => {
@@ -80,7 +64,7 @@ async fn main() {
         Command::Prepare => {
             let job_env = args.job_env.expect("Job Environment should be set");
 
-            nomad_runner::prepere(&nomad_config, &job_env, &env_values, &all_envs).await;
+            nomad_runner::prepere(&nomad_config, &job_env, &env_values).await;
         }
         Command::Run {
             script_path,

@@ -8,7 +8,7 @@ mod nomad;
 pub use gitlab::{CiEnv, JobInfo};
 
 use futures_util::{stream::StreamExt, SinkExt};
-use tokio::{io::AsyncWriteExt, net::TcpStream};
+use tokio::net::TcpStream;
 use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream};
 
 const JOB_NAME: &'static str = "Job";
@@ -127,12 +127,7 @@ impl RunSubStage {
 ///
 /// # Actions
 /// * Creates a new Batch Job in Nomad for this Gitlab Job
-pub async fn prepere(
-    config: &NomadConfig,
-    info: &gitlab::JobInfo,
-    ci_env: &CiEnv,
-    extra_envs: &HashMap<String, String>,
-) {
+pub async fn prepere(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEnv) {
     let job_spec = job::Spec {
         datacenters: config.datacenters.clone(),
         id: info.job_id.clone(),
@@ -304,45 +299,49 @@ pub async fn run(
         _ => MANAGEMENT_NAME,
     };
 
-    // TODO
-    // Only for testing
-    let job_name = MANAGEMENT_NAME;
-
     let script_name = script_path.file_name().unwrap().to_str().unwrap();
     let script_content = std::fs::read_to_string(script_path).unwrap();
 
-    println!("[RUN] {:?}", script_path.as_os_str());
-    println!("{}", script_content);
-
-    let mut copy_session =
-        ExecSession::start(&config.address, config.port, &running_alloc.id, job_name)
-            .await
-            .unwrap();
+    let mut copy_session = ExecSession::start(
+        &config.address,
+        config.port,
+        &running_alloc.id,
+        MANAGEMENT_NAME,
+    )
+    .await
+    .unwrap();
     copy_session
         .write_to_file(&script_content, &format!("/mnt/alloc/{}", script_name))
         .await
         .unwrap();
+
+    ExecSession::start(
+        &config.address,
+        config.port,
+        &running_alloc.id,
+        MANAGEMENT_NAME,
+    )
+    .await
+    .unwrap()
+    .execute_command(
+        &format!(
+            "mkdir /mnt/alloc/builds; cd /mnt/alloc/builds; chmod +x /mnt/alloc/{}; exit 0;",
+            script_name
+        ),
+        |_| {},
+        |_| {},
+    )
+    .await
+    .unwrap();
 
     let mut run_session =
         ExecSession::start(&config.address, config.port, &running_alloc.id, job_name)
             .await
             .unwrap();
 
-    run_session
-        .execute_command(
-            &format!(
-                "mkdir /mnt/alloc/builds; cd /mnt/alloc/builds; chmod +x /mnt/alloc/{};",
-                script_name
-            ),
-            |_| {},
-            |_| {},
-        )
-        .await
-        .unwrap();
-
     let exit_code = run_session
         .execute_command(
-            &format!("/mnt/alloc/{}", script_name),
+            &format!("/mnt/alloc/{}; exit 0", script_name),
             |msg| {
                 println!("{}", msg);
             },
@@ -455,9 +454,7 @@ impl ExecSession {
 
         let mut exit_code = 0;
 
-        while let Ok(Some(msg_res)) =
-            tokio::time::timeout(Duration::from_millis(10000), self.connection.next()).await
-        {
+        while let Some(msg_res) = self.connection.next().await {
             let msg = match msg_res {
                 Ok(m) => m,
                 Err(e) => {
@@ -468,7 +465,7 @@ impl ExecSession {
             let frame: allocation::ExecResponseFrame = match msg {
                 Message::Text(txt) => serde_json::from_str(&txt).unwrap(),
                 Message::Close(close_frame) => {
-                    println!("{:?}", close_frame);
+                    // println!("{:?}", close_frame);
 
                     break;
                 }
@@ -491,7 +488,11 @@ impl ExecSession {
     }
 
     pub async fn write_to_file(&mut self, content: &str, path: &str) -> Result<isize, ()> {
-        let cmd = format!("echo \"{}\" > {}", content.replace('"', "\\\""), path);
+        let cmd = format!(
+            "echo \"{}\" > {}; exit 0",
+            content.replace('"', "\\\""),
+            path
+        );
 
         self.execute_command(&cmd, |_| {}, |_| {}).await
     }
