@@ -147,8 +147,9 @@ pub async fn prepere(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEn
                         work_dir: "/mnt/alloc".to_string(),
                         mounts: vec![],
                     },
-                    // env: extra_envs.clone(),
-                    env: HashMap::new(),
+                    env: [("GIT_SSL_NO_VERIFY".to_string(), "true".to_string())]
+                        .into_iter()
+                        .collect(),
                     resources: job::TaskResources {
                         cpu: 3000,
                         memory_mb: 750,
@@ -164,8 +165,9 @@ pub async fn prepere(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEn
                         work_dir: "/mnt/alloc".to_string(),
                         mounts: vec![],
                     },
-                    // env: extra_envs.clone(),
-                    env: HashMap::new(),
+                    env: [("GIT_SSL_NO_VERIFY".to_string(), "true".to_string())]
+                        .into_iter()
+                        .collect(),
                     resources: job::TaskResources {
                         cpu: 100,
                         memory_mb: 500,
