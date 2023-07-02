@@ -302,37 +302,28 @@ pub async fn run(
     let script_name = script_path.file_name().unwrap().to_str().unwrap();
     let script_content = std::fs::read_to_string(script_path).unwrap();
 
-    let mut copy_session = ExecSession::start(
-        &config.address,
-        config.port,
-        &running_alloc.id,
-        MANAGEMENT_NAME,
-    )
-    .await
-    .unwrap();
+    let mut copy_session =
+        ExecSession::start(&config.address, config.port, &running_alloc.id, JOB_NAME)
+            .await
+            .unwrap();
     copy_session
         .write_to_file(&script_content, &format!("/mnt/alloc/{}", script_name))
         .await
         .unwrap();
 
-    ExecSession::start(
-        &config.address,
-        config.port,
-        &running_alloc.id,
-        MANAGEMENT_NAME,
-    )
-    .await
-    .unwrap()
-    .execute_command(
-        &format!(
-            "mkdir /mnt/alloc/builds; cd /mnt/alloc/builds; chmod +x /mnt/alloc/{}; exit 0;",
-            script_name
-        ),
-        |_| {},
-        |_| {},
-    )
-    .await
-    .unwrap();
+    ExecSession::start(&config.address, config.port, &running_alloc.id, JOB_NAME)
+        .await
+        .unwrap()
+        .execute_command(
+            &format!(
+                "mkdir /mnt/alloc/builds; cd /mnt/alloc/builds; chmod +x /mnt/alloc/{}; exit 0;",
+                script_name
+            ),
+            |_| {},
+            |_| {},
+        )
+        .await
+        .unwrap();
 
     let mut run_session =
         ExecSession::start(&config.address, config.port, &running_alloc.id, job_name)
