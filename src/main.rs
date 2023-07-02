@@ -43,6 +43,11 @@ enum Command {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
+    let build_failure_exit_code: i32 = std::env::var("BUILD_FAILURE_EXIT_CODE")
+        .map_err(|_| ())
+        .and_then(|p| p.parse().map_err(|_| ()))
+        .unwrap_or(-1);
+
     let args = App::parse();
 
     let env_values = args.ci_env;
@@ -70,7 +75,10 @@ async fn main() {
 
             match nomad_runner::run(&nomad_config, &job_env, &script_path, substage).await {
                 Ok(exit_code) => {
-                    std::process::exit(exit_code);
+                    if exit_code != 0 {
+                        eprintln!("Exited with Code: {}", exit_code);
+                        std::process::exit(build_failure_exit_code);
+                    }
                 }
                 Err(e) => {}
             };
