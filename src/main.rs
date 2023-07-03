@@ -43,6 +43,8 @@ enum Command {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
+    env_logger::init();
+
     let build_failure_exit_code: i32 = std::env::var("BUILD_FAILURE_EXIT_CODE")
         .map_err(|_| ())
         .and_then(|p| p.parse().map_err(|_| ()))

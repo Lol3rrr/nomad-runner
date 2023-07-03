@@ -8,6 +8,7 @@ mod nomad;
 pub use gitlab::{CiEnv, JobInfo};
 
 use futures_util::{stream::StreamExt, SinkExt};
+use log::{debug, error};
 use tokio::net::TcpStream;
 use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream};
 
@@ -215,7 +216,7 @@ pub async fn prepere(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEn
     let nomad_client = nomad::Client::new(config.address.clone(), config.port);
 
     let res_body = nomad_client.run_job(job_spec).await.unwrap();
-    println!("Body: {:?}", res_body);
+    debug!("Body: {:?}", res_body);
 
     loop {
         let eval_allocs = nomad_client
@@ -236,7 +237,7 @@ pub async fn prepere(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEn
             break;
         }
 
-        println!("Body: {:?}", eval_allocs);
+        debug!("Body: {:?}", eval_allocs);
 
         tokio::time::sleep(Duration::from_millis(1250)).await;
     }
@@ -275,6 +276,9 @@ pub async fn run(
 
     let script_name = script_path.file_name().unwrap().to_str().unwrap();
     let script_content = std::fs::read_to_string(script_path).unwrap();
+
+    debug!("Running Script: {:?}", script_name);
+    debug!("Content: {:?}", script_content);
 
     let mut copy_session = ExecSession::start(
         &config.address,
@@ -363,7 +367,7 @@ pub async fn cleanup(config: &NomadConfig, info: &gitlab::JobInfo) {
     }
 
     let raw_body = res.text().await.unwrap();
-    println!("Response: {:?}", raw_body);
+    debug!("Response: {:?}", raw_body);
 }
 
 struct ExecSession {
@@ -401,7 +405,7 @@ impl ExecSession {
                         let body = resp.body().clone().unwrap();
                         let string = String::from_utf8(body.to_vec()).unwrap();
 
-                        println!("Response: {:?}", string);
+                        error!("Response: {:?}", string);
                         todo!("{:?}", resp);
                     }
                     other => todo!("{:?}", other),
@@ -410,7 +414,7 @@ impl ExecSession {
         };
 
         if !response.status().is_informational() {
-            println!("Websocket Response: {:?}", response);
+            error!("Websocket Response: {:?}", response);
 
             todo!("Establishing Websocket Connection was not successful");
         }
