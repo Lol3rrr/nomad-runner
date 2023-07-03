@@ -477,7 +477,7 @@ impl ExecSession {
     pub async fn write_to_file(&mut self, content: &str, path: &str) -> Result<i32, ()> {
         let cmd = format!(
             "echo \"{}\" > {}; exit 0",
-            content.replace('"', "\\\""),
+            content.replace('"', "\\\"").replace('\\', "\\\\"),
             path
         );
 
