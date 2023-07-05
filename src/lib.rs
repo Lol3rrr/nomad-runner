@@ -241,7 +241,10 @@ pub async fn prepere(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEn
     let res_body = nomad_client.run_job(job_spec).await.unwrap();
     debug!("Body: {:?}", res_body);
 
-    let mut event_stream = nomad_client.events(res_body.index).await.unwrap();
+    let mut event_stream = nomad_client
+        .events(res_body.index, Some(&[events::Topic::Allocation]))
+        .await
+        .unwrap();
     while let Some(tmp) = event_stream.recv().await {
         if tmp.topic != events::Topic::Allocation {
             continue;

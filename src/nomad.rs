@@ -260,7 +260,7 @@ pub mod evaluations {
 }
 
 pub mod events {
-    use std::collections::HashMap;
+    use std::{collections::HashMap, path::Display};
 
     use serde::{Deserialize, Serialize};
 
@@ -284,7 +284,7 @@ pub mod events {
         pub ty: String,
     }
 
-    #[derive(Debug, Deserialize, Serialize, PartialEq)]
+    #[derive(Debug, Deserialize, PartialEq)]
     pub enum Topic {
         #[serde(rename = "*")]
         Any,
@@ -299,6 +299,15 @@ pub mod events {
         NodeDrain,
         NodePool,
         Service,
+    }
+
+    impl std::fmt::Display for Topic {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                Self::Any => write!(f, "*"),
+                other => std::fmt::Debug::fmt(&self, f),
+            }
+        }
     }
 
     #[derive(Debug, Deserialize)]
@@ -450,6 +459,7 @@ impl Client {
     pub async fn events(
         &self,
         after: usize,
+        topics: Option<&[events::Topic]>,
     ) -> Result<tokio::sync::mpsc::Receiver<events::Event>, ClientRequestError> {
         let url = {
             let mut tmp = url_builder::URLBuilder::new();
@@ -458,8 +468,13 @@ impl Client {
                 .set_port(self.port)
                 .set_protocol("http")
                 .add_param("index", &format!("{}", after))
-                .add_param("topic", "Allocation:*")
                 .add_route("v1/event/stream");
+
+            if let Some(topics) = topics {
+                for t in topics {
+                    tmp.add_param("topic", &format!("{}:*", t));
+                }
+            }
 
             tmp.build()
         };
