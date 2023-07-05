@@ -155,6 +155,25 @@ pub mod allocation {
         #[serde(rename = "ID")]
         pub id: String,
 
+        #[serde(rename = "JobID")]
+        pub job_id: String,
+
+        #[serde(rename = "Name")]
+        pub name: String,
+
+        #[serde(rename = "TaskGroup")]
+        pub task_group: String,
+        #[serde(rename = "Namespace")]
+        pub namespace: String,
+
+        #[serde(rename = "NodeID")]
+        pub node_id: String,
+        #[serde(rename = "NodeName")]
+        pub node_name: String,
+
+        #[serde(rename = "DesiredStatus")]
+        pub desired_status: String,
+
         #[serde(rename = "ClientStatus")]
         pub client_status: String,
 
@@ -164,6 +183,9 @@ pub mod allocation {
             deserialize_with = "nullable_taskstates"
         )]
         pub task_states: HashMap<String, TaskState>,
+
+        #[serde(flatten)]
+        pub rest: HashMap<String, serde_json::Value>,
     }
 
     fn nullable_taskstates<'de, D>(deserializer: D) -> Result<HashMap<String, TaskState>, D::Error>
@@ -238,27 +260,31 @@ pub mod evaluations {
 }
 
 pub mod events {
+    use std::collections::HashMap;
+
     use serde::{Deserialize, Serialize};
+
+    use super::allocation;
 
     #[derive(Debug, Deserialize)]
     pub struct Event {
         #[serde(rename = "FilterKeys", default)]
-        filter_keys: Option<Vec<String>>,
+        pub filter_keys: Option<Vec<String>>,
         #[serde(rename = "Index")]
-        index: usize,
+        pub index: usize,
         #[serde(rename = "Key")]
-        key: String,
+        pub key: String,
         #[serde(rename = "Namespace")]
-        namespace: String,
+        pub namespace: String,
         #[serde(rename = "Payload")]
-        payload: serde_json::Value,
+        pub payload: Payload,
         #[serde(rename = "Topic")]
-        topic: Topic,
+        pub topic: Topic,
         #[serde(rename = "Type")]
-        ty: String,
+        pub ty: String,
     }
 
-    #[derive(Debug, Deserialize, Serialize)]
+    #[derive(Debug, Deserialize, Serialize, PartialEq)]
     pub enum Topic {
         #[serde(rename = "*")]
         Any,
@@ -273,6 +299,14 @@ pub mod events {
         NodeDrain,
         NodePool,
         Service,
+    }
+
+    #[derive(Debug, Deserialize)]
+    pub struct Payload {
+        #[serde(rename = "Allocation")]
+        pub allocation: Option<allocation::Spec>,
+        #[serde(flatten)]
+        pub rest: HashMap<String, serde_json::Value>,
     }
 
     #[derive(Debug, Deserialize)]
@@ -415,6 +449,7 @@ impl Client {
     /// Get an Event Stream from Nomad
     pub async fn events(
         &self,
+        after: usize,
     ) -> Result<tokio::sync::mpsc::Receiver<events::Event>, ClientRequestError> {
         let url = {
             let mut tmp = url_builder::URLBuilder::new();
@@ -422,6 +457,8 @@ impl Client {
             tmp.set_host(&self.addr)
                 .set_port(self.port)
                 .set_protocol("http")
+                .add_param("index", &format!("{}", after))
+                .add_param("topic", "Allocation:*")
                 .add_route("v1/event/stream");
 
             tmp.build()
@@ -456,7 +493,7 @@ impl Client {
 
                     let raw_events: events::RawEventStreamMessage =
                         serde_json::from_slice(&inner).unwrap();
-                    println!("Raw-Event: {:#?}", raw_events);
+                    // println!("Raw-Event: {:#?}", raw_events);
 
                     for ev in raw_events.events {
                         if let Err(e) = tx.send(ev).await {

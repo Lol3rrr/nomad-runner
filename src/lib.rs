@@ -1,6 +1,6 @@
-use std::{path::Path, time::Duration};
+use std::path::Path;
 
-use crate::nomad::job;
+use crate::nomad::{events, job};
 
 mod gitlab;
 mod nomad;
@@ -215,39 +215,59 @@ pub async fn prepere(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEn
 
     let nomad_client = nomad::Client::new(config.address.clone(), config.port);
 
+    println!("Checking for existing Job...");
+
+    let prev_res = nomad_client
+        .get_job_allocations(&info.job_id)
+        .await
+        .unwrap();
+
+    if !prev_res.is_empty()
+        && prev_res.into_iter().all(|alloc| {
+            alloc
+                .task_states
+                .into_iter()
+                .any(|task| task.1.state.eq_ignore_ascii_case("running"))
+        })
+    {
+        panic!(
+            "There already exists a Job with the ID '{}' running",
+            info.job_id
+        );
+    }
+
     println!("Starting Job...");
 
     let res_body = nomad_client.run_job(job_spec).await.unwrap();
     debug!("Body: {:?}", res_body);
 
-    let mut event_stream = nomad_client.events().await.unwrap();
+    let mut event_stream = nomad_client.events(res_body.index).await.unwrap();
     while let Some(tmp) = event_stream.recv().await {
-        println!("Event: {:?}", tmp);
-    }
+        if tmp.topic != events::Topic::Allocation {
+            continue;
+        }
 
-    loop {
-        let eval_allocs = nomad_client
-            .get_eval_allocations(&res_body.eval_id)
-            .await
-            .unwrap();
+        let alloction_data = tmp
+            .payload
+            .allocation
+            .expect("Event with Allocation Topic should contain an allocation payload");
 
-        let running = !eval_allocs.is_empty()
-            && eval_allocs.iter().all(|alloc| {
-                !alloc.task_states.is_empty()
-                    && alloc
-                        .task_states
-                        .values()
-                        .all(|state| state.state.eq_ignore_ascii_case("running"))
-            });
+        if alloction_data.job_id != info.job_id {
+            continue;
+        }
+
+        let running = !alloction_data.task_states.is_empty()
+            && alloction_data
+                .task_states
+                .values()
+                .all(|state| state.state.eq_ignore_ascii_case("running"));
 
         if running {
             break;
         }
-
-        debug!("Body: {:?}", eval_allocs);
-
-        tokio::time::sleep(Duration::from_millis(1250)).await;
     }
+
+    println!("Job has started.");
 }
 
 /// Runs the Run Stage for the Gitlab Runner
@@ -366,6 +386,8 @@ pub async fn cleanup(config: &NomadConfig, info: &gitlab::JobInfo) {
 
         tmp.build()
     };
+
+    println!("Stopping/Removing Job '{}'", info.job_id);
 
     let res = client.delete(url).send().await.unwrap();
 
