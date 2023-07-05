@@ -237,6 +237,51 @@ pub mod evaluations {
     pub type ListAllocationsResponse = Vec<super::allocation::Spec>;
 }
 
+pub mod events {
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Debug, Deserialize)]
+    pub struct Event {
+        #[serde(rename = "FilterKeys", default)]
+        filter_keys: Option<Vec<String>>,
+        #[serde(rename = "Index")]
+        index: usize,
+        #[serde(rename = "Key")]
+        key: String,
+        #[serde(rename = "Namespace")]
+        namespace: String,
+        #[serde(rename = "Payload")]
+        payload: serde_json::Value,
+        #[serde(rename = "Topic")]
+        topic: Topic,
+        #[serde(rename = "Type")]
+        ty: String,
+    }
+
+    #[derive(Debug, Deserialize, Serialize)]
+    pub enum Topic {
+        #[serde(rename = "*")]
+        Any,
+        ACLToken,
+        ACLPolicy,
+        ACLRoles,
+        Allocation,
+        Job,
+        Evaluation,
+        Deployment,
+        Node,
+        NodeDrain,
+        NodePool,
+        Service,
+    }
+
+    #[derive(Debug, Deserialize)]
+    pub struct RawEventStreamMessage {
+        #[serde(rename = "Events", default)]
+        pub events: Vec<Event>,
+    }
+}
+
 pub struct Client {
     addr: String,
     port: u16,
@@ -365,5 +410,63 @@ impl Client {
         res.json()
             .await
             .map_err(ClientRequestError::InvalidResponse)
+    }
+
+    /// Get an Event Stream from Nomad
+    pub async fn events(
+        &self,
+    ) -> Result<tokio::sync::mpsc::Receiver<events::Event>, ClientRequestError> {
+        let url = {
+            let mut tmp = url_builder::URLBuilder::new();
+
+            tmp.set_host(&self.addr)
+                .set_port(self.port)
+                .set_protocol("http")
+                .add_route("v1/event/stream");
+
+            tmp.build()
+        };
+
+        let mut res = self
+            .http_client
+            .get(&url)
+            .send()
+            .await
+            .map_err(ClientRequestError::SendingRequest)?;
+
+        let (tx, rx) = tokio::sync::mpsc::channel(8);
+
+        // Read from the Stream from the API, processes the Raw Data and enqueue the individual
+        // Events received
+        tokio::spawn(async move {
+            let mut buffer = Vec::new();
+
+            while let Ok(Some(chunk)) = res.chunk().await {
+                buffer.extend(chunk);
+
+                // Continue to find the newline seperating different JSON payloads
+                while let Some(idx) = buffer
+                    .iter()
+                    .enumerate()
+                    .find(|(_, c)| **c == b'\n')
+                    .map(|(i, _)| i)
+                {
+                    let inner: Vec<u8> = buffer.drain(0..idx).collect();
+                    buffer.remove(0);
+
+                    let raw_events: events::RawEventStreamMessage =
+                        serde_json::from_slice(&inner).unwrap();
+                    println!("Raw-Event: {:#?}", raw_events);
+
+                    for ev in raw_events.events {
+                        if let Err(e) = tx.send(ev).await {
+                            return;
+                        }
+                    }
+                }
+            }
+        });
+
+        Ok(rx)
     }
 }

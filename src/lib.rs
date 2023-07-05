@@ -220,6 +220,11 @@ pub async fn prepere(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEn
     let res_body = nomad_client.run_job(job_spec).await.unwrap();
     debug!("Body: {:?}", res_body);
 
+    let mut event_stream = nomad_client.events().await.unwrap();
+    while let Some(tmp) = event_stream.recv().await {
+        println!("Event: {:?}", tmp);
+    }
+
     loop {
         let eval_allocs = nomad_client
             .get_eval_allocations(&res_body.eval_id)
