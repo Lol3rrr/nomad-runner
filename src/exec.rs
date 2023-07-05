@@ -63,8 +63,8 @@ impl ExecSession {
     pub async fn execute_command<SO, SE>(
         &mut self,
         command: &str,
-        mut stdout: SO,
-        mut stderr: SE,
+        stdout: SO,
+        stderr: SE,
     ) -> Result<i32, ()>
     where
         SO: FnMut(String),
@@ -79,6 +79,14 @@ impl ExecSession {
             .await
             .unwrap();
 
+        self.read_logs(stdout, stderr).await
+    }
+
+    pub async fn read_logs<SO, SE>(&mut self, mut stdout: SO, mut stderr: SE) -> Result<i32, ()>
+    where
+        SO: FnMut(String),
+        SE: FnMut(String),
+    {
         let mut exit_code = 0;
 
         while let Some(msg_res) = self.connection.next().await {

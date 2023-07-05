@@ -352,8 +352,7 @@ pub async fn run(
     .unwrap();
 
     let exit_code = run_session
-        .execute_command(
-            "",
+        .read_logs(
             |msg| {
                 print!("{}", msg);
             },
