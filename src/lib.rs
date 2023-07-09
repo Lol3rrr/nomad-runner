@@ -187,8 +187,8 @@ pub async fn prepere(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEn
                         .into_iter()
                         .collect(),
                     resources: job::TaskResources {
-                        cpu: 3000,
-                        memory_mb: 1000,
+                        cpu: 5000,
+                        memory_mb: 4000,
                     },
                 },
                 job::Task {
@@ -206,7 +206,7 @@ pub async fn prepere(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEn
                         .collect(),
                     resources: job::TaskResources {
                         cpu: 100,
-                        memory_mb: 500,
+                        memory_mb: 300,
                     },
                 },
             ],
