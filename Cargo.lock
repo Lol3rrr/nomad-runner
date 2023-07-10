@@ -605,6 +605,7 @@ dependencies = [
  "env_logger",
  "futures-util",
  "log",
+ "rand",
  "reqwest",
  "serde",
  "serde_json",

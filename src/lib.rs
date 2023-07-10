@@ -11,6 +11,7 @@ use exec::ExecSession;
 pub use gitlab::{CiEnv, JobInfo};
 
 use log::debug;
+use rand::Rng;
 
 const JOB_NAME: &str = "Job";
 const MANAGEMENT_NAME: &str = "Manage";
@@ -63,10 +64,12 @@ impl NomadConfig {
 }
 
 pub fn config(ci_env: &CiEnv) -> gitlab::JobConfig {
+    let rid: u64 = rand::thread_rng().gen();
+
     gitlab::JobConfig {
         driver: gitlab::DriverInfo::new(),
         job_env: gitlab::JobInfo {
-            job_id: format!("ci-{}", ci_env.ci_job_id),
+            job_id: format!("ci-{}-{:x}", ci_env.ci_job_id, rid),
         },
     }
 }
