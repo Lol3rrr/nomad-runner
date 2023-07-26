@@ -67,7 +67,7 @@ async fn main() {
         Command::Prepare => {
             let job_env = args.job_env.expect("Job Environment should be set");
 
-            nomad_runner::prepere(&nomad_config, &job_env, &env_values).await;
+            nomad_runner::prepare(&nomad_config, &job_env, &env_values).await;
         }
         Command::Run {
             script_path,

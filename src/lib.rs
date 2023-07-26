@@ -166,7 +166,7 @@ impl RunSubStage {
 ///
 /// # Actions
 /// * Creates a new Batch Job in Nomad for this Gitlab Job
-pub async fn prepere(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEnv) {
+pub async fn prepare(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEnv) {
     let job_spec = job::Spec {
         datacenters: config.datacenters.clone(),
         id: info.job_id.clone(),
@@ -244,6 +244,8 @@ pub async fn prepere(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEn
     let res_body = nomad_client.run_job(job_spec).await.unwrap();
     debug!("Body: {:?}", res_body);
 
+    let mut node_name = String::new();
+
     let mut event_stream = nomad_client
         .events(res_body.index, Some(&[events::Topic::Allocation]))
         .await
@@ -257,6 +259,8 @@ pub async fn prepere(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEn
             .payload
             .allocation
             .expect("Event with Allocation Topic should contain an allocation payload");
+
+        node_name = alloction_data.node_name;
 
         if alloction_data.job_id != info.job_id {
             continue;
@@ -273,7 +277,7 @@ pub async fn prepere(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEn
         }
     }
 
-    println!("Job has started.");
+    println!("Job has started on {}.", node_name);
 }
 
 /// Runs the Run Stage for the Gitlab Runner
