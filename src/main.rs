@@ -82,7 +82,9 @@ async fn main() {
                         std::process::exit(build_failure_exit_code);
                     }
                 }
-                Err(e) => {}
+                Err(e) => {
+                    // TODO
+                }
             };
         }
         Command::Cleanup => {

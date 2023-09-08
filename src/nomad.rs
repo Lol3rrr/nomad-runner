@@ -260,9 +260,9 @@ pub mod evaluations {
 }
 
 pub mod events {
-    use std::{collections::HashMap, path::Display};
+    use std::collections::HashMap;
 
-    use serde::{Deserialize, Serialize};
+    use serde::Deserialize;
 
     use super::allocation;
 
@@ -512,6 +512,9 @@ impl Client {
 
                     for ev in raw_events.events {
                         if let Err(e) = tx.send(ev).await {
+                            // The error here is intentionally ignored as there is nothing sensible
+                            // we could do to act on said error.
+                            let _ = e;
                             return;
                         }
                     }

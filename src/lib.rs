@@ -1,4 +1,6 @@
-use std::path::Path;
+#![warn(clippy::unwrap_used)]
+
+use std::{borrow::Cow, path::Path};
 
 use crate::nomad::{events, job};
 
@@ -280,19 +282,29 @@ pub async fn prepare(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEn
     println!("Job has started on {}.", node_name);
 }
 
+#[derive(Debug)]
+pub enum RunError {
+    LoadingJobAllocations(nomad::ClientRequestError),
+    StartingExecSession {
+        error: exec::StartError,
+        ctx: &'static str,
+    },
+    Other(Cow<'static, str>),
+}
+
 /// Runs the Run Stage for the Gitlab Runner
 pub async fn run(
     config: &NomadConfig,
     info: &gitlab::JobInfo,
     script_path: &Path,
     sub_stage: RunSubStage,
-) -> Result<i32, ()> {
+) -> Result<i32, RunError> {
     let nomad_client = nomad::Client::new(config.address.clone(), config.port);
 
     let content = nomad_client
         .get_job_allocations(&info.job_id)
         .await
-        .expect("Should be able to load Job Allocations");
+        .map_err(|e| RunError::LoadingJobAllocations(e))?;
 
     let running_alloc = match content.into_iter().find(|alloc| {
         alloc
@@ -325,11 +337,15 @@ pub async fn run(
         &["/bin/bash"],
     )
     .await
-    .unwrap();
+    .map_err(|e| RunError::StartingExecSession {
+        ctx: "Copying script file",
+        error: e,
+    })?;
+
     copy_session
         .write_to_file(&script_content, &format!("/mnt/alloc/{}", script_name))
         .await
-        .unwrap();
+        .map_err(|e| RunError::Other(Cow::Borrowed("Writing File to ExecSession")))?;
 
     ExecSession::start(
         &config.address,
@@ -339,7 +355,10 @@ pub async fn run(
         &["/bin/bash"],
     )
     .await
-    .unwrap()
+    .map_err(|e| RunError::StartingExecSession {
+        ctx: "Setting up environment",
+        error: e,
+    })?
     .execute_command(
         &format!(
             "mkdir /mnt/alloc/builds; cd /mnt/alloc/builds; chmod +x /mnt/alloc/{}; exit 0;",
@@ -349,7 +368,7 @@ pub async fn run(
         |_| {},
     )
     .await
-    .unwrap();
+    .map_err(|e| RunError::Other(Cow::Borrowed("Executing command on ExecSession")))?;
 
     let mut run_session = ExecSession::start(
         &config.address,
@@ -359,7 +378,10 @@ pub async fn run(
         &["/bin/bash", &format!("/mnt/alloc/{}", script_name)],
     )
     .await
-    .unwrap();
+    .map_err(|e| RunError::StartingExecSession {
+        ctx: "Running loaded script",
+        error: e,
+    })?;
 
     let exit_code = run_session
         .read_logs(
@@ -371,7 +393,7 @@ pub async fn run(
             },
         )
         .await
-        .unwrap();
+        .map_err(|e| RunError::Other(Cow::Borrowed("Reading logs from ExecSession")))?;
 
     Ok(exit_code)
 }

@@ -2,12 +2,18 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::net::TcpStream;
 use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream};
 
-use log::error;
-
 use crate::nomad::allocation;
 
 pub struct ExecSession {
     connection: WebSocketStream<MaybeTlsStream<TcpStream>>,
+}
+
+#[derive(Debug)]
+pub enum StartError {
+    CommandToJson(serde_json::Error),
+    WebsocketHttp { response: String },
+    WebsocketConnect(tokio_tungstenite::tungstenite::Error),
+    InvalidWebsocketStatus,
 }
 
 impl ExecSession {
@@ -17,10 +23,10 @@ impl ExecSession {
         alloc_id: &str,
         task_name: &str,
         cmds: &[&str],
-    ) -> Result<Self, ()> {
+    ) -> Result<Self, StartError> {
         let route = format!("v1/client/allocation/{}/exec", alloc_id);
 
-        let cmd_string = serde_json::to_string(cmds).unwrap();
+        let cmd_string = serde_json::to_string(cmds).map_err(|e| StartError::CommandToJson(e))?;
         let command_encoded = urlencoding::encode(&cmd_string);
 
         let mut ub = url_builder::URLBuilder::new();
@@ -39,20 +45,17 @@ impl ExecSession {
                 match e {
                     tokio_tungstenite::tungstenite::Error::Http(resp) => {
                         let body = resp.body().clone().unwrap();
-                        let string = String::from_utf8(body.to_vec()).unwrap();
+                        let string = String::from_utf8(body).unwrap();
 
-                        error!("Response: {:?}", string);
-                        todo!("{:?}", resp);
+                        return Err(StartError::WebsocketHttp { response: string });
                     }
-                    other => todo!("{:?}", other),
+                    other => return Err(StartError::WebsocketConnect(other)),
                 };
             }
         };
 
         if !response.status().is_informational() {
-            error!("Websocket Response: {:?}", response);
-
-            todo!("Establishing Websocket Connection was not successful");
+            return Err(StartError::InvalidWebsocketStatus);
         }
 
         Ok(Self {
