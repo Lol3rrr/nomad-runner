@@ -168,7 +168,11 @@ impl RunSubStage {
 ///
 /// # Actions
 /// * Creates a new Batch Job in Nomad for this Gitlab Job
-pub async fn prepare(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEnv) {
+pub async fn prepare(
+    config: &NomadConfig,
+    info: &gitlab::JobInfo,
+    ci_env: &CiEnv,
+) -> Result<(), ()> {
     let job_spec = job::Spec {
         datacenters: config.datacenters.clone(),
         id: info.job_id.clone(),
@@ -184,8 +188,8 @@ pub async fn prepare(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEn
                         image: ci_env.job_image.clone(),
                         entrypoint: vec!["/bin/bash".to_string()],
                         interactive: true,
-                        volumes: vec!["../alloc/:/mnt/alloc".to_string()],
-                        work_dir: "/mnt/alloc".to_string(),
+                        volumes: vec![],
+                        work_dir: "${NOMAD_ALLOC_DIR}".to_string(),
                         mounts: vec![],
                     },
                     env: [("GIT_SSL_NO_VERIFY".to_string(), "true".to_string())]
@@ -202,8 +206,8 @@ pub async fn prepare(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEn
                         image: "gitlab/gitlab-runner:latest".to_string(),
                         entrypoint: vec!["/bin/bash".to_string()],
                         interactive: true,
-                        volumes: vec!["../alloc/:/mnt/alloc".to_string()],
-                        work_dir: "/mnt/alloc".to_string(),
+                        volumes: vec![],
+                        work_dir: "${NOMAD_ALLOC_DIR}".to_string(),
                         mounts: vec![],
                     },
                     env: [("GIT_SSL_NO_VERIFY".to_string(), "true".to_string())]
@@ -225,7 +229,7 @@ pub async fn prepare(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEn
     let prev_res = nomad_client
         .get_job_allocations(&info.job_id)
         .await
-        .unwrap();
+        .map_err(|e| ())?;
 
     if !prev_res.is_empty()
         && prev_res.into_iter().all(|alloc| {
@@ -241,7 +245,7 @@ pub async fn prepare(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEn
         );
     }
 
-    println!("Starting Job...");
+    println!("Starting Job as '{}'...", info.job_id);
 
     let res_body = nomad_client.run_job(job_spec).await.unwrap();
     debug!("Body: {:?}", res_body);
@@ -251,16 +255,20 @@ pub async fn prepare(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEn
     let mut event_stream = nomad_client
         .events(res_body.index, Some(&[events::Topic::Allocation]))
         .await
-        .unwrap();
+        .map_err(|e| ())?;
+
     while let Some(tmp) = event_stream.recv().await {
         if tmp.topic != events::Topic::Allocation {
             continue;
         }
 
-        let alloction_data = tmp
-            .payload
-            .allocation
-            .expect("Event with Allocation Topic should contain an allocation payload");
+        let alloction_data = match tmp.payload.allocation {
+            Some(s) => s,
+            None => {
+                println!("[Warn] Payload was missing from event");
+                continue;
+            }
+        };
 
         node_name = alloction_data.node_name;
 
@@ -280,6 +288,8 @@ pub async fn prepare(config: &NomadConfig, info: &gitlab::JobInfo, ci_env: &CiEn
     }
 
     println!("Job has started on {}.", node_name);
+
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -314,6 +324,7 @@ pub async fn run(
     }) {
         Some(a) => a,
         None => {
+            println!("Not running job found");
             todo!("No running allocation");
         }
     };

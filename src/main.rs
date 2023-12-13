@@ -67,7 +67,10 @@ async fn main() {
         Command::Prepare => {
             let job_env = args.job_env.expect("Job Environment should be set");
 
-            nomad_runner::prepare(&nomad_config, &job_env, &env_values).await;
+            if let Err(e) = nomad_runner::prepare(&nomad_config, &job_env, &env_values).await {
+                println!("Failed Prepare:\n{:?}", e);
+                std::process::exit(build_failure_exit_code);
+            }
         }
         Command::Run {
             script_path,
