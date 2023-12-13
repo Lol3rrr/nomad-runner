@@ -23,9 +23,16 @@ const MANAGEMENT_NAME: &str = "Manage";
 /// This is needed to configure the correct Access to a Nomad Cluster
 #[derive(Debug)]
 pub struct NomadConfig {
+    pub endpoint: NomadEndpoint,
     pub address: String,
     pub port: u16,
     pub datacenters: Vec<String>,
+}
+
+#[derive(Debug)]
+pub enum NomadEndpoint {
+    HTTP { address: String, port: u16 },
+    UnixSocket { path: String, token: String },
 }
 
 impl NomadConfig {
@@ -38,22 +45,40 @@ impl NomadConfig {
     /// * `NOMAD_DATACENTER`: The Datacenter in which to run the Jobs
     pub fn load_with_defaults() -> Self {
         let mut raw = Self {
+            endpoint: NomadEndpoint::HTTP {
+                address: "127.0.0.1".to_string(),
+                port: 4646,
+            },
             address: "127.0.0.1".to_string(),
             port: 4646,
             datacenters: vec!["dc1".to_string()],
         };
 
+        let task_api_vars = std::env::var("NOMAD_SECRETS_DIR")
+            .ok()
+            .and_then(|dir| std::env::var("NOMAD_TOKEN").ok().map(|token| (dir, token)));
+
+        let address = std::env::var("NOMAD_ADDR").unwrap_or("127.0.0.1".to_string());
+        let port = std::env::var("NOMAD_PORT")
+            .ok()
+            .map(|rp| rp.parse::<u16>().ok())
+            .flatten()
+            .unwrap_or(4646);
+
+        raw.address = address.clone();
+        raw.port = port;
+
+        raw.endpoint = match task_api_vars {
+            Some((dir, token)) => NomadEndpoint::UnixSocket {
+                path: format!("{}/api.sock", dir),
+                token,
+            },
+            None => NomadEndpoint::HTTP { address, port },
+        };
+
         // Search for set environment variables
         for (key, value) in std::env::vars() {
             match key.as_str() {
-                "NOMAD_ADDR" => {
-                    raw.address = value;
-                }
-                "NOMAD_PORT" => {
-                    if let Ok(port) = value.parse() {
-                        raw.port = port;
-                    }
-                }
                 "NOMAD_DATACENTER" => {
                     raw.datacenters = vec![value];
                 }
@@ -189,7 +214,7 @@ pub async fn prepare(
                         entrypoint: vec!["/bin/bash".to_string()],
                         interactive: true,
                         volumes: vec![],
-                        work_dir: "/mnt/alloc/".to_string(),
+                        work_dir: "/alloc/".to_string(),
                         mounts: vec![],
                     },
                     env: [("GIT_SSL_NO_VERIFY".to_string(), "true".to_string())]
@@ -207,7 +232,7 @@ pub async fn prepare(
                         entrypoint: vec!["/bin/bash".to_string()],
                         interactive: true,
                         volumes: vec![],
-                        work_dir: "/mnt/alloc".to_string(),
+                        work_dir: "/alloc".to_string(),
                         mounts: vec![],
                     },
                     env: [("GIT_SSL_NO_VERIFY".to_string(), "true".to_string())]
@@ -376,7 +401,7 @@ pub async fn run(
     })?
     .execute_command(
         &format!(
-            "mkdir /mnt/alloc/builds; cd /mnt/alloc/builds; chmod +x /alloc/{}; exit 0;",
+            "mkdir /alloc/builds; cd /alloc/builds; chmod +x /alloc/{}; exit 0;",
             script_name
         ),
         |_| {},

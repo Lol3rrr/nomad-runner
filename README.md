@@ -9,8 +9,8 @@ Configuration for the runner itself:
 ```
 [[runners]]
   executor = "custom"
-  builds_dir = "/mnt/alloc/builds"
-  cache_dir = "/mnt/alloc/cache"
+  builds_dir = "/alloc/builds"
+  cache_dir = "/alloc/cache"
   [runners.custom]
     config_exec = "/bin/nomad-runner"
     config_args = [ "config" ]
