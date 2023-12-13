@@ -50,6 +50,11 @@ async fn main() {
         .and_then(|p| p.parse().map_err(|_| ()))
         .unwrap_or(-1);
 
+    let system_failure_exit_code: i32 = std::env::var("SYSTEM_FAILURE_EXIT_CODE")
+        .map_err(|_| ())
+        .and_then(|p| p.parse().map_err(|_| ()))
+        .unwrap_or(-1);
+
     let args = App::parse();
 
     let env_values = args.ci_env;
@@ -69,7 +74,7 @@ async fn main() {
 
             if let Err(e) = nomad_runner::prepare(&nomad_config, &job_env, &env_values).await {
                 println!("Failed Prepare:\n{:?}", e);
-                std::process::exit(build_failure_exit_code);
+                std::process::exit(system_failure_exit_code);
             }
         }
         Command::Run {
@@ -86,7 +91,9 @@ async fn main() {
                     }
                 }
                 Err(e) => {
-                    // TODO
+                    println!("Running Script: {:?}", e);
+
+                    std::process::exit(system_failure_exit_code)
                 }
             };
         }
