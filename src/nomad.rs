@@ -253,6 +253,39 @@ pub mod allocation {
                 .unwrap()
         }
     }
+
+    // This is not comprehensive, for more details see: https://developer.hashicorp.com/nomad/api-docs/allocations#read-allocation
+    #[derive(Debug, Deserialize)]
+    pub struct Details {
+        #[serde(rename = "ID")]
+        id: String,
+        #[serde(rename = "EvalID")]
+        eval_id: String,
+        #[serde(rename = "Name")]
+        name: String,
+        #[serde(rename = "TaskResources")]
+        task_resources: serde_json::Value,
+        #[serde(rename = "TaskStates")]
+        pub task_states: HashMap<String, DetailTaskStates>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    pub struct DetailTaskStates {
+        #[serde(rename = "State")]
+        pub state: String,
+        #[serde(rename = "Failed")]
+        pub failed: bool,
+        #[serde(rename = "Events")]
+        pub events: Vec<DetailEvent>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    pub struct DetailEvent {
+        #[serde(rename = "Type")]
+        pub ty: String,
+        #[serde(rename = "ExitCode")]
+        pub exit_code: Option<i32>,
+    }
 }
 
 pub mod evaluations {
@@ -523,5 +556,38 @@ impl Client {
         });
 
         Ok(rx)
+    }
+
+    pub async fn read_allocation(
+        &self,
+        alloc: &str,
+    ) -> Result<allocation::Details, ClientRequestError> {
+        let url = {
+            let mut tmp = url_builder::URLBuilder::new();
+
+            tmp.set_host(&self.addr)
+                .set_port(self.port)
+                .set_protocol("http")
+                .add_route(&format!("v1/allocation/{}", alloc));
+
+            tmp.build()
+        };
+
+        let res = self
+            .http_client
+            .get(&url)
+            .send()
+            .await
+            .map_err(ClientRequestError::SendingRequest)?;
+
+        if !res.status().is_success() {
+            return Err(ClientRequestError::ErrorResponse {
+                status_code: res.status(),
+            });
+        }
+
+        res.json()
+            .await
+            .map_err(ClientRequestError::InvalidResponse)
     }
 }

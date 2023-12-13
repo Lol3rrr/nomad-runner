@@ -104,7 +104,6 @@ impl ExecSession {
                 Message::Text(txt) => serde_json::from_str(&txt).unwrap(),
                 Message::Close(_close_frame) => {
                     // println!("{:?}", _close_frame);
-                    println!("Closed: {:?}", _close_frame);
 
                     break;
                 }
@@ -120,7 +119,6 @@ impl ExecSession {
 
             if let Some(res) = frame.result {
                 exit_code = res.exit_code;
-                println!("Got Exit Code: {:?}", exit_code);
             }
         }
 

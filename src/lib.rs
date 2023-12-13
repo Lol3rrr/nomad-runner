@@ -5,7 +5,7 @@ use std::{borrow::Cow, path::Path};
 use crate::nomad::{events, job};
 
 mod gitlab;
-mod nomad;
+pub mod nomad;
 
 mod exec;
 use exec::ExecSession;
@@ -367,8 +367,6 @@ pub async fn run(
     debug!("Running Script: {:?}", script_name);
     debug!("Content: {:?}", script_content);
 
-    println!("[D] Copying script to runner");
-
     let mut copy_session = ExecSession::start(
         &config.address,
         config.port,
@@ -386,8 +384,6 @@ pub async fn run(
         .write_to_file(&script_content, &format!("/alloc/{}", script_name))
         .await
         .map_err(|e| RunError::Other(Cow::Borrowed("Writing File to ExecSession")))?;
-
-    println!("[D] Setting up Environment");
 
     ExecSession::start(
         &config.address,
@@ -411,8 +407,6 @@ pub async fn run(
     )
     .await
     .map_err(|e| RunError::Other(Cow::Borrowed("Executing command on ExecSession")))?;
-
-    println!("[D] Running Script");
 
     let mut run_session = ExecSession::start(
         &config.address,
@@ -438,6 +432,24 @@ pub async fn run(
         )
         .await
         .map_err(|e| RunError::Other(Cow::Borrowed("Reading logs from ExecSession")))?;
+
+    let details = nomad_client
+        .read_allocation(&running_alloc.id)
+        .await
+        .map_err(|e| RunError::Other(Cow::Borrowed("Reading Allocation Details")))?;
+
+    if let Some(states) = details.task_states.get(JOB_NAME) {
+        for event in states.events.iter() {
+            if event.exit_code.unwrap_or(0) != 0 {
+                println!(
+                    "Task stopped with Non-Zero exit code: {:?}",
+                    event.exit_code
+                );
+
+                return Ok(event.exit_code.unwrap());
+            }
+        }
+    }
 
     Ok(exit_code)
 }
