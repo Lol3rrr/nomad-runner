@@ -340,6 +340,8 @@ pub async fn run(
     debug!("Running Script: {:?}", script_name);
     debug!("Content: {:?}", script_content);
 
+    println!("[D] Copying script to runner");
+
     let mut copy_session = ExecSession::start(
         &config.address,
         config.port,
@@ -354,9 +356,11 @@ pub async fn run(
     })?;
 
     copy_session
-        .write_to_file(&script_content, &format!("/alloc/{}", script_name))
+        .write_to_file(&script_content, &format!("/mnt/alloc/{}", script_name))
         .await
         .map_err(|e| RunError::Other(Cow::Borrowed("Writing File to ExecSession")))?;
+
+    println!("[D] Setting up Environment");
 
     ExecSession::start(
         &config.address,
@@ -372,7 +376,7 @@ pub async fn run(
     })?
     .execute_command(
         &format!(
-            "mkdir /alloc/builds; cd /alloc/builds; chmod +x /alloc/{}; exit 0;",
+            "mkdir /mnt/alloc/builds; cd /mnt/alloc/builds; chmod +x /mnt/alloc/{}; exit 0;",
             script_name
         ),
         |_| {},
@@ -381,12 +385,14 @@ pub async fn run(
     .await
     .map_err(|e| RunError::Other(Cow::Borrowed("Executing command on ExecSession")))?;
 
+    println!("[D] Running Script");
+
     let mut run_session = ExecSession::start(
         &config.address,
         config.port,
         &running_alloc.id,
         job_name,
-        &["/bin/bash", &format!("/alloc/{}", script_name)],
+        &["/bin/bash", &format!("/mnt/alloc/{}", script_name)],
     )
     .await
     .map_err(|e| RunError::StartingExecSession {
