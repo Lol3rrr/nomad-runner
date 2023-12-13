@@ -189,7 +189,7 @@ pub async fn prepare(
                         entrypoint: vec!["/bin/bash".to_string()],
                         interactive: true,
                         volumes: vec![],
-                        work_dir: "${NOMAD_ALLOC_DIR}".to_string(),
+                        work_dir: "/mnt/alloc/".to_string(),
                         mounts: vec![],
                     },
                     env: [("GIT_SSL_NO_VERIFY".to_string(), "true".to_string())]
@@ -207,7 +207,7 @@ pub async fn prepare(
                         entrypoint: vec!["/bin/bash".to_string()],
                         interactive: true,
                         volumes: vec![],
-                        work_dir: "${NOMAD_ALLOC_DIR}".to_string(),
+                        work_dir: "/mnt/alloc".to_string(),
                         mounts: vec![],
                     },
                     env: [("GIT_SSL_NO_VERIFY".to_string(), "true".to_string())]
