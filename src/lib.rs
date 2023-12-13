@@ -386,7 +386,7 @@ pub async fn run(
         config.port,
         &running_alloc.id,
         job_name,
-        &["/bin/bash", &format!("$NOMAD_ALLOC_DIR{}", script_name)],
+        &["/bin/bash", &format!("/alloc/{}", script_name)],
     )
     .await
     .map_err(|e| RunError::StartingExecSession {
