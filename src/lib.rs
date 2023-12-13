@@ -359,8 +359,6 @@ pub async fn run(
         _ => MANAGEMENT_NAME,
     };
 
-    println!("Running in Job {:?}", job_name);
-
     let script_name = script_path.file_name().unwrap().to_str().unwrap();
     let script_content = std::fs::read_to_string(script_path).unwrap();
 
