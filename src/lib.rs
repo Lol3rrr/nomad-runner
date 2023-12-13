@@ -354,10 +354,7 @@ pub async fn run(
     })?;
 
     copy_session
-        .write_to_file(
-            &script_content,
-            &format!("${{NOMAD_ALLOC_DIR}}{}", script_name),
-        )
+        .write_to_file(&script_content, &format!("$NOMAD_ALLOC_DIR{}", script_name))
         .await
         .map_err(|e| RunError::Other(Cow::Borrowed("Writing File to ExecSession")))?;
 
@@ -375,7 +372,7 @@ pub async fn run(
     })?
     .execute_command(
         &format!(
-            "mkdir /mnt/alloc/builds; cd /mnt/alloc/builds; chmod +x ${{NOMAD_ALLOC_DIR}}{}; exit 0;",
+            "mkdir /mnt/alloc/builds; cd /mnt/alloc/builds; chmod +x $NOMAD_ALLOC_DIR{}; exit 0;",
             script_name
         ),
         |_| {},
@@ -389,7 +386,7 @@ pub async fn run(
         config.port,
         &running_alloc.id,
         job_name,
-        &["/bin/bash", &format!("${{NOMAD_ALLOC_DIR}}{}", script_name)],
+        &["/bin/bash", &format!("$NOMAD_ALLOC_DIR{}", script_name)],
     )
     .await
     .map_err(|e| RunError::StartingExecSession {
