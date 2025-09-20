@@ -43,6 +43,8 @@ impl NomadConfig {
     /// * `NOMAD_ADDR`: The Nomad address
     /// * `NOMAD_PORT`: The Nomad Port
     /// * `NOMAD_DATACENTER`: The Datacenter in which to run the Jobs
+    /// * `NOMAD_SOCKET`: The Secret Dir
+    /// * `NOMAD_TOKEN`: The nomad token
     pub fn load_with_defaults() -> Self {
         let mut raw = Self {
             endpoint: NomadEndpoint::HTTP {
@@ -54,7 +56,7 @@ impl NomadConfig {
             datacenters: vec!["dc1".to_string()],
         };
 
-        let task_api_vars = std::env::var("NOMAD_SECRETS_DIR")
+        let task_api_vars = std::env::var("NOMAD_SOCKET")
             .ok()
             .and_then(|dir| std::env::var("NOMAD_TOKEN").ok().map(|token| (dir, token)));
 
@@ -70,7 +72,7 @@ impl NomadConfig {
 
         raw.endpoint = match task_api_vars {
             Some((dir, token)) => NomadEndpoint::UnixSocket {
-                path: format!("{}/api.sock", dir),
+                path: dir,
                 token,
             },
             None => NomadEndpoint::HTTP { address, port },
@@ -247,7 +249,16 @@ pub async fn prepare(
         }],
     };
 
-    let nomad_client = nomad::Client::new(config.address.clone(), config.port);
+    match &config.endpoint {
+        NomadEndpoint::HTTP { address, port } => {
+            println!("Using normal HTTP endpoint");
+        }
+        NomadEndpoint::UnixSocket { path, token } => {
+            println!("Using unix domain socket");
+        }
+    };
+
+    let nomad_client = config_to_client(config);
 
     println!("Checking for existing Job...");
 
@@ -327,6 +338,17 @@ pub enum RunError {
     Other(Cow<'static, str>),
 }
 
+fn config_to_client(config: &NomadConfig) -> nomad::Client {
+    match &config.endpoint {
+        NomadEndpoint::HTTP { address, port } => {
+            nomad::Client::new(config.address.clone(), config.port)
+        }
+        NomadEndpoint::UnixSocket { path, token } => {
+            nomad::Client::new_socket(config.address.clone(), config.port, path.into(), token.clone())
+        }
+    }
+}
+
 /// Runs the Run Stage for the Gitlab Runner
 pub async fn run(
     config: &NomadConfig,
@@ -334,7 +356,7 @@ pub async fn run(
     script_path: &Path,
     sub_stage: RunSubStage,
 ) -> Result<i32, RunError> {
-    let nomad_client = nomad::Client::new(config.address.clone(), config.port);
+    let nomad_client = config_to_client(config);
 
     let content = nomad_client
         .get_job_allocations(&info.job_id)
@@ -366,6 +388,7 @@ pub async fn run(
     debug!("Content: {:?}", script_content);
 
     let mut copy_session = ExecSession::start(
+        &config.endpoint,
         &config.address,
         config.port,
         &running_alloc.id,
@@ -384,6 +407,7 @@ pub async fn run(
         .map_err(|e| RunError::Other(Cow::Borrowed("Writing File to ExecSession")))?;
 
     ExecSession::start(
+        &config.endpoint,
         &config.address,
         config.port,
         &running_alloc.id,
@@ -407,6 +431,7 @@ pub async fn run(
     .map_err(|e| RunError::Other(Cow::Borrowed("Executing command on ExecSession")))?;
 
     let mut run_session = ExecSession::start(
+        &config.endpoint,
         &config.address,
         config.port,
         &running_alloc.id,
@@ -457,29 +482,15 @@ pub async fn run(
 /// # Actions
 /// * Deletes the previously created Batch Job for the Gitlab Job
 pub async fn cleanup(config: &NomadConfig, info: &gitlab::JobInfo) {
-    let client = reqwest::Client::new();
-
-    let url = {
-        let mut tmp = url_builder::URLBuilder::new();
-
-        let route = format!("v1/job/{}", info.job_id);
-        tmp.set_host(&config.address)
-            .set_port(config.port)
-            .set_protocol("http")
-            .add_route(&route)
-            .add_param("purge", "true");
-
-        tmp.build()
+    let nomad_client = config_to_client(config);
+   
+    println!("Removing Job: '{}'", info.job_id);
+    match nomad_client.remove_job(&info.job_id).await {
+        Ok(_) => {
+            println!("Removed Job: '{}'", info.job_id);
+        }
+        Err(e) => {
+            println!("Failed to remove job: '{}'", info.job_id);
+        }
     };
-
-    println!("Stopping/Removing Job '{}'", info.job_id);
-
-    let res = client.delete(url).send().await.unwrap();
-
-    if !res.status().is_success() {
-        todo!("Failed to delete Nomad job")
-    }
-
-    let raw_body = res.text().await.unwrap();
-    debug!("Response: {:?}", raw_body);
 }

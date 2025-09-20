@@ -49,9 +49,9 @@ EOF
       }
 
       env {
-        NOMAD_ADDR       = "nomad.service.consul"
-        NOMAD_PORT       = "4646"
         NOMAD_DATACENTER = "dc1"
+        NOMAD_SOCKET     = "${NOMAD_SECRETS_DIR}/api.sock"
+        NOMAD_TOKEN      = "${NOMAD_TOKEN}"
       }
     }
   }

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 /// All the Nomad Job related definitions
 pub mod job {
     use std::collections::HashMap;
@@ -361,6 +363,7 @@ pub mod events {
 pub struct Client {
     addr: String,
     port: u16,
+    token: Option<String>,
     http_client: reqwest::Client,
 }
 
@@ -372,10 +375,21 @@ pub enum ClientRequestError {
 }
 
 impl Client {
+    pub fn new_socket(addr: String, port: u16, path: PathBuf, token: String) -> Self {
+        Self {
+            addr,
+            port,
+            token: Some(token),
+            http_client: reqwest::Client::builder().unix_socket(path).build().unwrap(),
+        }
+    }
+
+
     pub fn new(addr: String, port: u16) -> Self {
         Self {
             addr,
             port,
+            token: None,
             http_client: reqwest::Client::new(),
         }
     }
@@ -396,10 +410,14 @@ impl Client {
             tmp.build()
         };
 
-        let res = self
+        let mut req = self
             .http_client
-            .get(url)
-            .send()
+            .get(url);
+        if let Some(token) = self.token.as_ref() {
+            req = req.bearer_auth(token);
+        }
+
+        let res = req.send()
             .await
             .map_err(ClientRequestError::SendingRequest)?;
 
@@ -428,11 +446,15 @@ impl Client {
             tmp.build()
         };
 
-        let res = self
+        let mut req = self
             .http_client
             .post(url)
-            .json(&job_spec_json)
-            .send()
+            .json(&job_spec_json);
+        if let Some(token) = self.token.as_ref() {
+            req = req.bearer_auth(token);
+        }
+
+        let res = req.send()
             .await
             .map_err(ClientRequestError::SendingRequest)?;
 
@@ -470,10 +492,14 @@ impl Client {
             tmp.build()
         };
 
-        let res = self
+        let mut req = self
             .http_client
-            .get(&url)
-            .send()
+            .get(&url);
+        if let Some(token) = self.token.as_ref() {
+            req = req.bearer_auth(token);
+        }
+
+        let res = req.send()
             .await
             .map_err(ClientRequestError::SendingRequest)?;
 
@@ -512,10 +538,14 @@ impl Client {
             tmp.build()
         };
 
-        let mut res = self
+        let mut req = self
             .http_client
-            .get(&url)
-            .send()
+            .get(&url);
+        if let Some(token) = self.token.as_ref() {
+            req = req.bearer_auth(token);
+        }
+
+        let mut res = req.send()
             .await
             .map_err(ClientRequestError::SendingRequest)?;
 
@@ -573,9 +603,14 @@ impl Client {
             tmp.build()
         };
 
-        let res = self
+        let mut req = self
             .http_client
-            .get(&url)
+            .get(&url);
+        if let Some(token) = self.token.as_ref() {
+            req = req.bearer_auth(token);
+        }
+
+        let res = req
             .send()
             .await
             .map_err(ClientRequestError::SendingRequest)?;
@@ -589,5 +624,36 @@ impl Client {
         res.json()
             .await
             .map_err(ClientRequestError::InvalidResponse)
+    }
+
+    pub async fn remove_job(&self, job_id: &str) -> Result<(), ClientRequestError> {
+        let url = {
+            let mut tmp = url_builder::URLBuilder::new();
+
+            let route = format!("v1/job/{}", job_id);
+            tmp.set_host(&self.addr)
+                .set_port(self.port)
+                .set_protocol("http")
+                .add_route(&route)
+                .add_param("purge", "true");
+
+            tmp.build()
+        };
+
+        let mut req = self.http_client.delete(url);
+        if let Some(token) = self.token.as_ref() {
+            req = req.bearer_auth(token);
+        }
+
+        let res = req.send().await.unwrap();
+
+        if !res.status().is_success() {
+            return Err(ClientRequestError::ErrorResponse { status_code: res.status() });
+        }
+
+        // TODO
+        let _raw_body = res.text().await.unwrap();
+
+        Ok(())
     }
 }
