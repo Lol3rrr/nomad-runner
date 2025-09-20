@@ -1,11 +1,17 @@
 use futures_util::{SinkExt, StreamExt};
 use tokio::net::TcpStream;
-use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::{
+    tungstenite::{self, Message},
+    MaybeTlsStream, WebSocketStream,
+};
 
-use crate::nomad::allocation;
+use crate::{nomad::allocation, NomadEndpoint};
 
 pub struct ExecSession {
-    connection: WebSocketStream<MaybeTlsStream<TcpStream>>,
+    connection: tokio_util::either::Either<
+        WebSocketStream<MaybeTlsStream<TcpStream>>,
+        WebSocketStream<tokio::net::UnixStream>,
+    >,
 }
 
 #[derive(Debug)]
@@ -18,6 +24,7 @@ pub enum StartError {
 
 impl ExecSession {
     pub async fn start(
+        endpoint: &NomadEndpoint,
         host: &str,
         port: u16,
         alloc_id: &str,
@@ -37,20 +44,60 @@ impl ExecSession {
             .add_param("command", &command_encoded)
             .add_param("task", task_name)
             .add_param("tty", "false");
-        let ws_url = ub.build();
 
-        let (ws_connection, response) = match tokio_tungstenite::connect_async(ws_url).await {
-            Ok(c) => c,
-            Err(e) => {
-                match e {
-                    tokio_tungstenite::tungstenite::Error::Http(resp) => {
-                        let body = resp.body().clone().unwrap();
-                        let string = String::from_utf8(body).unwrap();
+        let (ws_connection, response) = match endpoint {
+            NomadEndpoint::HTTP { .. } => {
+                let ws_url = ub.build();
 
-                        return Err(StartError::WebsocketHttp { response: string });
+                match tokio_tungstenite::connect_async(ws_url).await {
+                    Ok((c, r)) => (tokio_util::either::Either::Left(c), r),
+                    Err(e) => {
+                        match e {
+                            tokio_tungstenite::tungstenite::Error::Http(resp) => {
+                                let body = resp.body().clone().unwrap();
+                                let string = String::from_utf8(body).unwrap();
+
+                                return Err(StartError::WebsocketHttp { response: string });
+                            }
+                            other => return Err(StartError::WebsocketConnect(other)),
+                        };
                     }
-                    other => return Err(StartError::WebsocketConnect(other)),
-                };
+                }
+            }
+            NomadEndpoint::UnixSocket { path, token } => {
+                let host = ub.host().to_string();
+                let ws_url = ub.build();
+
+                let req = tungstenite::handshake::client::Request::builder()
+                    .method("GET")
+                    .header("Host", host)
+                    .header("Connection", "Upgrade")
+                    .header("Upgrade", "websocket")
+                    .header("Sec-WebSocket-Version", "13")
+                    .header("Authorization", format!("Bearer {}", token))
+                    .header(
+                        "Sec-WebSocket-Key",
+                        tungstenite::handshake::client::generate_key(),
+                    )
+                    .uri(ws_url)
+                    .body(())
+                    .unwrap();
+
+                let stream = tokio::net::UnixStream::connect(path).await.unwrap();
+                match tokio_tungstenite::client_async(req, stream).await {
+                    Ok((c, r)) => (tokio_util::either::Either::Right(c), r),
+                    Err(e) => {
+                        match e {
+                            tokio_tungstenite::tungstenite::Error::Http(resp) => {
+                                let body = resp.body().clone().unwrap();
+                                let string = String::from_utf8(body).unwrap();
+
+                                return Err(StartError::WebsocketHttp { response: string });
+                            }
+                            other => return Err(StartError::WebsocketConnect(other)),
+                        };
+                    }
+                }
             }
         };
 
@@ -78,7 +125,9 @@ impl ExecSession {
         };
 
         self.connection
-            .send(Message::Text(serde_json::to_string(&request).unwrap()))
+            .send(Message::Text(
+                serde_json::to_string(&request).unwrap().into(),
+            ))
             .await
             .unwrap();
 
