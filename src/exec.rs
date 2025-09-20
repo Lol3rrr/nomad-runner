@@ -96,6 +96,8 @@ impl ExecSession {
             let msg = match msg_res {
                 Ok(m) => m,
                 Err(e) => {
+                    // FIXME
+                    return Ok(0);
                     panic!("Error: {:?}", e);
                 }
             };

@@ -1,5 +1,5 @@
 # Based on https://kerkour.com/rust-small-docker-image
-FROM rust:1.70 AS builder
+FROM rust:1.90.0-trixie AS builder
 
 WORKDIR /runner/nomad-runner
 
@@ -20,7 +20,7 @@ COPY ./ /runner/nomad-runner
 
 RUN cargo build --release
 
-FROM gitlab/gitlab-runner:ubuntu-v16.1.0
+FROM gitlab/gitlab-runner:ubuntu-v18.3.0
 
 # Copy our build
 COPY --from=builder /runner/nomad-runner/target/release/nomad-runner /bin/nomad-runner
