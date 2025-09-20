@@ -1,6 +1,9 @@
 #![warn(clippy::unwrap_used)]
 
-use std::{borrow::Cow, path::Path};
+use std::{
+    borrow::Cow,
+    path::{Path, PathBuf},
+};
 
 use crate::nomad::{events, job};
 
@@ -18,6 +21,16 @@ use rand::Rng;
 const JOB_NAME: &str = "Job";
 const MANAGEMENT_NAME: &str = "Manage";
 
+#[derive(Debug, serde::Deserialize)]
+pub struct Config {
+    #[serde(default = "default_datacenters")]
+    pub datacenters: Vec<String>,
+}
+
+fn default_datacenters() -> Vec<String> {
+    vec!["dc1".to_string()]
+}
+
 /// The Nomad Configuration
 ///
 /// This is needed to configure the correct Access to a Nomad Cluster
@@ -26,13 +39,33 @@ pub struct NomadConfig {
     pub endpoint: NomadEndpoint,
     pub address: String,
     pub port: u16,
-    pub datacenters: Vec<String>,
 }
 
 #[derive(Debug)]
 pub enum NomadEndpoint {
     HTTP { address: String, port: u16 },
     UnixSocket { path: String, token: String },
+}
+
+impl Config {
+    pub async fn load_with_defaults(path: impl Into<PathBuf>) -> Result<Self, ()> {
+        let path = path.into();
+        let content = match tokio::fs::read(path).await {
+            Ok(c) => c,
+            Err(e) => {
+                println!("Reading Config: {:?}", e);
+                return Err(());
+            }
+        };
+
+        match serde_yaml::from_slice(&content) {
+            Ok(v) => Ok(v),
+            Err(e) => {
+                println!("Parsing Config: {:?}", e);
+                Err(())
+            }
+        }
+    }
 }
 
 impl NomadConfig {
@@ -53,7 +86,6 @@ impl NomadConfig {
             },
             address: "127.0.0.1".to_string(),
             port: 4646,
-            datacenters: vec!["dc1".to_string()],
         };
 
         let task_api_vars = std::env::var("NOMAD_SOCKET")
@@ -74,16 +106,6 @@ impl NomadConfig {
             Some((dir, token)) => NomadEndpoint::UnixSocket { path: dir, token },
             None => NomadEndpoint::HTTP { address, port },
         };
-
-        // Search for set environment variables
-        for (key, value) in std::env::vars() {
-            match key.as_str() {
-                "NOMAD_DATACENTER" => {
-                    raw.datacenters = vec![value];
-                }
-                _ => {}
-            };
-        }
 
         raw
     }
@@ -194,11 +216,12 @@ impl RunSubStage {
 /// * Creates a new Batch Job in Nomad for this Gitlab Job
 pub async fn prepare(
     config: &NomadConfig,
+    conf: &Config,
     info: &gitlab::JobInfo,
     ci_env: &CiEnv,
 ) -> Result<(), ()> {
     let job_spec = job::Spec {
-        datacenters: config.datacenters.clone(),
+        datacenters: conf.datacenters.clone(),
         id: info.job_id.clone(),
         ty: job::Ty::Batch,
         task_groups: vec![job::TaskGroup {
