@@ -21,31 +21,40 @@ job "gitlab" {
   shell = "bash"
   [runners.custom]
     config_exec = "/bin/nomad-runner"
-    config_args = [ "config" ]
+    config_args = [ "--config", "/local/config.yaml", "config" ]
     config_exec_timeout = 200
 
     prepare_exec = "/bin/nomad-runner"
-    prepare_args = [ "prepare" ]
+    prepare_args = [ "--config", "/local/config.yaml", "prepare" ]
     prepare_exec_timeout = 200
 
     run_exec = "/bin/nomad-runner"
-    run_args = [ "run" ]
+    run_args = [ "--config", "/local/config.yaml", "run" ]
 
     cleanup_exec = "/bin/nomad-runner"
-    cleanup_args = [ "cleanup" ]
+    cleanup_args = [ "--config", "/local/config.yaml", "cleanup" ]
     cleanup_exec_timeout = 200
 
     graceful_kill_timeout = 200
     force_kill_timeout = 200
 EOF
-        destination = "local/config.toml"
+        destination = "local/runner-config.toml"
+        change_mode = "restart"
+      }
+
+      template {
+        data = <<EOF
+datacenters:
+  - 'dc1'
+EOF
+        destination = "local/config.yaml"
         change_mode = "restart"
       }
 
       config {
         image = "ghcr.io/lol3rrr/nomad-runner:latest"
 
-        args = ["run", "-c", "${NOMAD_TASK_DIR}/config.toml"]
+        args = ["run", "-c", "${NOMAD_TASK_DIR}/runner-config.toml"]
       }
 
       env {
