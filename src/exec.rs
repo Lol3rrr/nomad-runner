@@ -1,11 +1,17 @@
 use futures_util::{SinkExt, StreamExt};
 use tokio::net::TcpStream;
-use tokio_tungstenite::{tungstenite::{self, Message}, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::{
+    tungstenite::{self, Message},
+    MaybeTlsStream, WebSocketStream,
+};
 
 use crate::{nomad::allocation, NomadEndpoint};
 
 pub struct ExecSession {
-    connection: tokio_util::either::Either<WebSocketStream<MaybeTlsStream<TcpStream>>, WebSocketStream<tokio::net::UnixStream>>,
+    connection: tokio_util::either::Either<
+        WebSocketStream<MaybeTlsStream<TcpStream>>,
+        WebSocketStream<tokio::net::UnixStream>,
+    >,
 }
 
 #[derive(Debug)]
@@ -43,7 +49,7 @@ impl ExecSession {
             NomadEndpoint::HTTP { .. } => {
                 let ws_url = ub.build();
 
-                 match tokio_tungstenite::connect_async(ws_url).await {
+                match tokio_tungstenite::connect_async(ws_url).await {
                     Ok((c, r)) => (tokio_util::either::Either::Left(c), r),
                     Err(e) => {
                         match e {
@@ -59,20 +65,23 @@ impl ExecSession {
                 }
             }
             NomadEndpoint::UnixSocket { path, token } => {
-               
                 let host = ub.host().to_string();
                 let ws_url = ub.build();
 
-                let req = tungstenite::handshake::client::Request::builder()     
+                let req = tungstenite::handshake::client::Request::builder()
                     .method("GET")
-            .header("Host", host)
-            .header("Connection", "Upgrade")
-            .header("Upgrade", "websocket")
-            .header("Sec-WebSocket-Version", "13")
-            .header("Authorization", format!("Bearer {}", token))
-                    .header("Sec-WebSocket-Key", tungstenite::handshake::client::generate_key())
-            .uri(ws_url)
-                    .body(()).unwrap();
+                    .header("Host", host)
+                    .header("Connection", "Upgrade")
+                    .header("Upgrade", "websocket")
+                    .header("Sec-WebSocket-Version", "13")
+                    .header("Authorization", format!("Bearer {}", token))
+                    .header(
+                        "Sec-WebSocket-Key",
+                        tungstenite::handshake::client::generate_key(),
+                    )
+                    .uri(ws_url)
+                    .body(())
+                    .unwrap();
 
                 let stream = tokio::net::UnixStream::connect(path).await.unwrap();
                 match tokio_tungstenite::client_async(req, stream).await {
@@ -116,7 +125,9 @@ impl ExecSession {
         };
 
         self.connection
-            .send(Message::Text(serde_json::to_string(&request).unwrap().into()))
+            .send(Message::Text(
+                serde_json::to_string(&request).unwrap().into(),
+            ))
             .await
             .unwrap();
 

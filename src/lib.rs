@@ -71,10 +71,7 @@ impl NomadConfig {
         raw.port = port;
 
         raw.endpoint = match task_api_vars {
-            Some((dir, token)) => NomadEndpoint::UnixSocket {
-                path: dir,
-                token,
-            },
+            Some((dir, token)) => NomadEndpoint::UnixSocket { path: dir, token },
             None => NomadEndpoint::HTTP { address, port },
         };
 
@@ -343,9 +340,12 @@ fn config_to_client(config: &NomadConfig) -> nomad::Client {
         NomadEndpoint::HTTP { address, port } => {
             nomad::Client::new(config.address.clone(), config.port)
         }
-        NomadEndpoint::UnixSocket { path, token } => {
-            nomad::Client::new_socket(config.address.clone(), config.port, path.into(), token.clone())
-        }
+        NomadEndpoint::UnixSocket { path, token } => nomad::Client::new_socket(
+            config.address.clone(),
+            config.port,
+            path.into(),
+            token.clone(),
+        ),
     }
 }
 
@@ -483,7 +483,7 @@ pub async fn run(
 /// * Deletes the previously created Batch Job for the Gitlab Job
 pub async fn cleanup(config: &NomadConfig, info: &gitlab::JobInfo) {
     let nomad_client = config_to_client(config);
-   
+
     println!("Removing Job: '{}'", info.job_id);
     match nomad_client.remove_job(&info.job_id).await {
         Ok(_) => {

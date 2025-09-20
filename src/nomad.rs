@@ -380,10 +380,12 @@ impl Client {
             addr,
             port,
             token: Some(token),
-            http_client: reqwest::Client::builder().unix_socket(path).build().unwrap(),
+            http_client: reqwest::Client::builder()
+                .unix_socket(path)
+                .build()
+                .unwrap(),
         }
     }
-
 
     pub fn new(addr: String, port: u16) -> Self {
         Self {
@@ -410,14 +412,13 @@ impl Client {
             tmp.build()
         };
 
-        let mut req = self
-            .http_client
-            .get(url);
+        let mut req = self.http_client.get(url);
         if let Some(token) = self.token.as_ref() {
             req = req.bearer_auth(token);
         }
 
-        let res = req.send()
+        let res = req
+            .send()
             .await
             .map_err(ClientRequestError::SendingRequest)?;
 
@@ -446,15 +447,13 @@ impl Client {
             tmp.build()
         };
 
-        let mut req = self
-            .http_client
-            .post(url)
-            .json(&job_spec_json);
+        let mut req = self.http_client.post(url).json(&job_spec_json);
         if let Some(token) = self.token.as_ref() {
             req = req.bearer_auth(token);
         }
 
-        let res = req.send()
+        let res = req
+            .send()
             .await
             .map_err(ClientRequestError::SendingRequest)?;
 
@@ -492,14 +491,13 @@ impl Client {
             tmp.build()
         };
 
-        let mut req = self
-            .http_client
-            .get(&url);
+        let mut req = self.http_client.get(&url);
         if let Some(token) = self.token.as_ref() {
             req = req.bearer_auth(token);
         }
 
-        let res = req.send()
+        let res = req
+            .send()
             .await
             .map_err(ClientRequestError::SendingRequest)?;
 
@@ -538,14 +536,13 @@ impl Client {
             tmp.build()
         };
 
-        let mut req = self
-            .http_client
-            .get(&url);
+        let mut req = self.http_client.get(&url);
         if let Some(token) = self.token.as_ref() {
             req = req.bearer_auth(token);
         }
 
-        let mut res = req.send()
+        let mut res = req
+            .send()
             .await
             .map_err(ClientRequestError::SendingRequest)?;
 
@@ -603,9 +600,7 @@ impl Client {
             tmp.build()
         };
 
-        let mut req = self
-            .http_client
-            .get(&url);
+        let mut req = self.http_client.get(&url);
         if let Some(token) = self.token.as_ref() {
             req = req.bearer_auth(token);
         }
@@ -648,7 +643,9 @@ impl Client {
         let res = req.send().await.unwrap();
 
         if !res.status().is_success() {
-            return Err(ClientRequestError::ErrorResponse { status_code: res.status() });
+            return Err(ClientRequestError::ErrorResponse {
+                status_code: res.status(),
+            });
         }
 
         // TODO
