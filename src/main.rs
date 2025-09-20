@@ -63,7 +63,9 @@ async fn main() {
     let env_values = args.ci_env;
 
     let nomad_config = NomadConfig::load_with_defaults();
-    let config = nomad_runner::Config::load_with_defaults(args.config).await.unwrap();
+    let config = nomad_runner::Config::load_with_defaults(args.config)
+        .await
+        .unwrap();
 
     match args.command {
         Command::Config => {
@@ -76,7 +78,9 @@ async fn main() {
         Command::Prepare => {
             let job_env = args.job_env.expect("Job Environment should be set");
 
-            if let Err(e) = nomad_runner::prepare(&nomad_config, &config, &job_env, &env_values).await {
+            if let Err(e) =
+                nomad_runner::prepare(&nomad_config, &config, &job_env, &env_values).await
+            {
                 println!("Failed Prepare:\n{:?}", e);
                 std::process::exit(system_failure_exit_code);
             }

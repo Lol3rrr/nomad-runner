@@ -1,6 +1,9 @@
 #![warn(clippy::unwrap_used)]
 
-use std::{borrow::Cow, path::{Path, PathBuf}};
+use std::{
+    borrow::Cow,
+    path::{Path, PathBuf},
+};
 
 use crate::nomad::{events, job};
 
